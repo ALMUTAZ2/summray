@@ -274,7 +274,7 @@ export default function App() {
             <div className="bg-blue-50 border-b border-blue-100 px-6 py-4 flex items-center justify-between">
               <h2 className="text-sm font-bold text-blue-900 flex items-center gap-2">
                 <Video className="w-4 h-4" />
-                اجتماعات Webex الأخيرة
+                سجلات الاجتماعات (Webex)
               </h2>
             </div>
             <div className="p-4 flex overflow-x-auto gap-4">
@@ -314,8 +314,8 @@ export default function App() {
           <div className="bg-white shadow-2xl border border-slate-200 flex flex-col overflow-hidden">
             <div className="bg-slate-50 border-b border-slate-200 px-8 py-5 flex justify-between items-center shrink-0">
               <div className="text-right">
-                <h2 className="text-lg font-bold text-slate-900 mb-1">سجلات الاجتماع</h2>
-                <p className="text-xs text-slate-500 uppercase tracking-wider">المدخلات الخام</p>
+                <h2 className="text-lg font-bold text-slate-900 mb-1">محتوى الاجتماع</h2>
+                <p className="text-xs text-slate-500 uppercase tracking-wider">النص المستخرج والملفات</p>
               </div>
             </div>
             <div className="p-8 flex-1 flex flex-col min-h-0">

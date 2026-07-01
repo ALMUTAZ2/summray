@@ -258,7 +258,8 @@ async function startServer() {
       
       // Try to register webhook
       try {
-        await fetch("https://webexapis.com/v1/webhooks", {
+        console.log("Attempting to register Webex webhook...");
+        const whRes = await fetch("https://webexapis.com/v1/webhooks", {
           method: "POST",
           headers: {
             "Authorization": `Bearer ${data.access_token}`,
@@ -271,8 +272,12 @@ async function startServer() {
             event: "created"
           })
         });
+        
+        const whStatus = whRes.status;
+        const whText = await whRes.text();
+        console.log(`Webhook registration response: ${whStatus} - ${whText}`);
       } catch (webhookErr) {
-        console.error("Failed to register webhook (might need more scopes):", webhookErr);
+        console.error("Exception while registering webhook:", webhookErr);
       }
       
       // Send a success page that closes itself or redirect to dashboard
@@ -303,39 +308,52 @@ async function startServer() {
 
   // Webex Webhook Route
   app.post("/api/webhooks/webex", async (req, res) => {
+    console.log("================ WEBEX WEBHOOK RECEIVED ================");
+    console.log("Headers:", JSON.stringify(req.headers, null, 2));
+    console.log("Payload:", JSON.stringify(req.body, null, 2));
+    
     // Respond immediately to Webex to acknowledge receipt
     res.status(200).send("OK");
     
     try {
       const { resource, event, data } = req.body;
+      console.log(`Processing webhook: resource=${resource}, event=${event}`);
+      
       if (resource === "recordings" && event === "created" && data && data.id) {
         const recordingId = data.id;
+        console.log(`Getting valid Webex token for recording: ${recordingId}`);
         const accessToken = await getValidWebexToken();
         
-        console.log(`Processing new Webex recording: ${recordingId}`);
-        
-        // Fetch recording details
+        console.log(`Fetching recording details for ID: ${recordingId}`);
         const recRes = await fetch(`https://webexapis.com/v1/recordings/${recordingId}`, {
           headers: { Authorization: `Bearer ${accessToken}` }
         });
         
         if (!recRes.ok) {
+          console.error(`Failed to fetch recording details. Status: ${recRes.status}, ${recRes.statusText}`);
           throw new Error(`Failed to fetch recording details: ${recRes.statusText}`);
         }
         
         const recording = await recRes.json();
+        console.log("Recording Details received:", JSON.stringify(recording, null, 2));
 
         // Get transcript if available
         let transcriptText = "";
         if (recording.temporaryDirectDownloadLinks && recording.temporaryDirectDownloadLinks.transcriptDownloadLink) {
+          console.log(`Downloading transcript from: ${recording.temporaryDirectDownloadLinks.transcriptDownloadLink}`);
           try {
             const trRes = await fetch(recording.temporaryDirectDownloadLinks.transcriptDownloadLink);
             if (trRes.ok) {
               transcriptText = await trRes.text();
+              console.log(`Successfully downloaded transcript. Length: ${transcriptText.length} characters.`);
+            } else {
+              console.error(`Failed to download transcript. Status: ${trRes.status}`);
             }
           } catch (e) {
-            console.error("Failed to download transcript for recording", e);
+            console.error("Exception while downloading transcript for recording", e);
           }
+        } else {
+           console.log("No transcriptDownloadLink found in recording.temporaryDirectDownloadLinks");
         }
         
         if (!transcriptText) {
@@ -345,22 +363,30 @@ async function startServer() {
 
         // Generate AI summary
         console.log("Generating report from webhook transcript...");
-        const reportContent = await generateGovernanceReport(transcriptText);
+        try {
+          const reportContent = await generateGovernanceReport(transcriptText);
+          console.log("Successfully generated AI summary.");
 
-        // Save to DB
-        const db = getDb();
-        const meetings = db.meetings || [];
-        meetings.unshift({
-          id: recordingId,
-          topic: recording.topic || "اجتماع غير معنون",
-          createTime: recording.createTime || new Date().toISOString(),
-          transcript: transcriptText,
-          report: reportContent,
-          playbackUrl: recording.playbackUrl
-        });
-        
-        updateDb({ meetings });
-        console.log(`Successfully processed and saved meeting: ${recording.topic}`);
+          // Save to DB
+          console.log("Saving meeting to database...");
+          const db = getDb();
+          const meetings = db.meetings || [];
+          meetings.unshift({
+            id: recordingId,
+            topic: recording.topic || "اجتماع غير معنون",
+            createTime: recording.createTime || new Date().toISOString(),
+            transcript: transcriptText,
+            report: reportContent,
+            playbackUrl: recording.playbackUrl
+          });
+          
+          updateDb({ meetings });
+          console.log(`Successfully processed and saved meeting: ${recording.topic}`);
+        } catch (reportError) {
+          console.error("Error generating AI report:", reportError);
+        }
+      } else {
+        console.log("Webhook skipped. Not a 'recordings created' event with valid ID.");
       }
     } catch (error) {
       console.error("Error processing Webex webhook:", error);
