@@ -1,0 +1,8 @@
+{
+  "name": "Remix: Remix: الحوكمة الرقمية (DGP)",
+  "description": "منصة لإنشاء تقارير الحوكمة الختامية للاجتماعات.",
+  "requestFramePermissions": [],
+  "majorCapabilities": [
+    "MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"
+  ]
+}
