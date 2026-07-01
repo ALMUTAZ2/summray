@@ -23,6 +23,8 @@ export default function App() {
   const [isWebexConnected, setIsWebexConnected] = useState(false);
   const [isCheckingWebex, setIsCheckingWebex] = useState(true);
   const [meetings, setMeetings] = useState<any[]>([]);
+  const [isSyncing, setIsSyncing] = useState(false);
+  const [syncMessage, setSyncMessage] = useState<string | null>(null);
 
   const fileInputRef = useRef<HTMLInputElement>(null);
   const reportRef = useRef<HTMLDivElement>(null);
@@ -36,14 +38,25 @@ export default function App() {
   };
 
   const handleSyncMeetings = async () => {
+    setIsSyncing(true);
+    setSyncMessage(null);
     try {
       const res = await fetch('/api/meetings/sync', { method: 'POST' });
       const data = await res.json();
       if (data.success) {
         setMeetings(data.meetings);
+        setSyncMessage(`تمت المزامنة بنجاح. تم جلب ${data.count} اجتماع جديد.`);
+        setTimeout(() => setSyncMessage(null), 5000);
+      } else {
+        setSyncMessage("فشلت المزامنة.");
+        setTimeout(() => setSyncMessage(null), 5000);
       }
     } catch (err) {
       console.error("Failed to sync meetings:", err);
+      setSyncMessage("حدث خطأ أثناء المزامنة.");
+      setTimeout(() => setSyncMessage(null), 5000);
+    } finally {
+      setIsSyncing(false);
     }
   };
 
@@ -287,15 +300,27 @@ export default function App() {
               <Video className="w-4 h-4" />
               سجلات الاجتماعات (Webex)
             </h2>
-            {isWebexConnected && (
-              <button 
-                onClick={handleSyncMeetings}
-                className="text-xs flex items-center gap-1 bg-white border border-blue-200 text-blue-700 px-3 py-1.5 rounded hover:bg-blue-50 transition-colors"
-              >
-                <RefreshCw className="w-3 h-3" />
-                مزامنة السجلات الآن
-              </button>
-            )}
+            <div className="flex items-center gap-3">
+              {syncMessage && (
+                <span className="text-xs font-medium text-blue-700 bg-blue-100 px-2 py-1 rounded">
+                  {syncMessage}
+                </span>
+              )}
+              {isWebexConnected && (
+                <button 
+                  onClick={handleSyncMeetings}
+                  disabled={isSyncing}
+                  className="text-xs flex items-center gap-1 bg-white border border-blue-200 text-blue-700 px-3 py-1.5 rounded hover:bg-blue-50 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                >
+                  {isSyncing ? (
+                    <Loader2 className="w-3 h-3 animate-spin" />
+                  ) : (
+                    <RefreshCw className="w-3 h-3" />
+                  )}
+                  {isSyncing ? 'جاري المزامنة...' : 'مزامنة السجلات الآن'}
+                </button>
+              )}
+            </div>
           </div>
           <div className="p-4 flex overflow-x-auto gap-4">
             {!isWebexConnected ? (
