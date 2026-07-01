@@ -46,8 +46,57 @@ async function startServer() {
   // Webex OAuth Configuration
   const WEBEX_CLIENT_ID = process.env.WEBEX_CLIENT_ID || "C80fb3cd9de1af2235d440d2efe51d0ab34e871218c1eca52b861ddd63651c108";
   const WEBEX_CLIENT_SECRET = process.env.WEBEX_CLIENT_SECRET || "b8e068eee2b117ff54d97ec567527fe798958d2eceb6b11de8d2197bf6ea2fde";
-  const APP_URL = process.env.APP_URL || `http://localhost:${PORT}`;
-  const WEBEX_REDIRECT_URI = `${APP_URL}/auth/webex/callback`;
+  const WEBEX_REDIRECT_URI = process.env.WEBEX_REDIRECT_URI || "https://summray.onrender.com/auth/webex/callback";
+
+  // Helper function to get valid token, refreshing if necessary
+  async function getValidWebexToken() {
+    const db = getDb();
+    const tokens = db.webexTokens;
+    
+    if (!tokens) {
+      throw new Error("Webex is not connected.");
+    }
+    
+    const now = Date.now();
+    const expiresInMs = (tokens.expires_in - 300) * 1000; // Refresh 5 minutes before expiration
+    const expirationTime = tokens.updated_at + expiresInMs;
+    
+    if (now < expirationTime) {
+      return tokens.access_token;
+    }
+    
+    // Token is expired, need to refresh
+    console.log("Refreshing Webex Token...");
+    const response = await fetch("https://webexapis.com/v1/access_token", {
+      method: "POST",
+      headers: { "Content-Type": "application/x-www-form-urlencoded" },
+      body: new URLSearchParams({
+        grant_type: "refresh_token",
+        client_id: WEBEX_CLIENT_ID,
+        client_secret: WEBEX_CLIENT_SECRET,
+        refresh_token: tokens.refresh_token
+      })
+    });
+    
+    const data = await response.json();
+    
+    if (!response.ok) {
+      // If refresh fails, disconnect
+      updateDb({ webexTokens: null });
+      throw new Error(data.message || "Failed to refresh token");
+    }
+    
+    const newTokens = {
+      access_token: data.access_token,
+      refresh_token: data.refresh_token || tokens.refresh_token, // Webex might not send a new refresh token
+      expires_in: data.expires_in,
+      refresh_token_expires_in: data.refresh_token_expires_in || tokens.refresh_token_expires_in,
+      updated_at: Date.now()
+    };
+    
+    updateDb({ webexTokens: newTokens });
+    return newTokens.access_token;
+  }
 
   // Get Webex Connection Status
   app.get("/api/auth/webex/status", (req, res) => {
