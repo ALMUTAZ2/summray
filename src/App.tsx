@@ -6,7 +6,7 @@
 import React, { useState, useRef, useEffect } from 'react';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
-import { FileText, Loader2, Send, Download, UploadCloud, X, Mic, FileDown, Copy, Check, Video } from 'lucide-react';
+import { FileText, Loader2, Send, Download, UploadCloud, X, Mic, FileDown, Copy, Check, Video, RefreshCw } from 'lucide-react';
 import html2canvas from 'html2canvas';
 import jsPDF from 'jspdf';
 
@@ -33,6 +33,18 @@ export default function App() {
       .then(res => res.json())
       .then(data => setMeetings(data))
       .catch(err => console.error("Failed to fetch meetings:", err));
+  };
+
+  const handleSyncMeetings = async () => {
+    try {
+      const res = await fetch('/api/meetings/sync', { method: 'POST' });
+      const data = await res.json();
+      if (data.success) {
+        setMeetings(data.meetings);
+      }
+    } catch (err) {
+      console.error("Failed to sync meetings:", err);
+    }
   };
 
   useEffect(() => {
@@ -269,16 +281,33 @@ export default function App() {
           <span className="text-slate-900 font-medium">توليد تقرير الحوكمة</span>
         </div>
 
-        {meetings.length > 0 && (
-          <div className="mb-6 bg-white shadow-sm border border-slate-200 rounded-lg overflow-hidden shrink-0">
-            <div className="bg-blue-50 border-b border-blue-100 px-6 py-4 flex items-center justify-between">
-              <h2 className="text-sm font-bold text-blue-900 flex items-center gap-2">
-                <Video className="w-4 h-4" />
-                سجلات الاجتماعات (Webex)
-              </h2>
-            </div>
-            <div className="p-4 flex overflow-x-auto gap-4">
-              {meetings.map((meeting) => (
+        <div className="mb-6 bg-white shadow-sm border border-slate-200 rounded-lg overflow-hidden shrink-0">
+          <div className="bg-blue-50 border-b border-blue-100 px-6 py-4 flex items-center justify-between">
+            <h2 className="text-sm font-bold text-blue-900 flex items-center gap-2">
+              <Video className="w-4 h-4" />
+              سجلات الاجتماعات (Webex)
+            </h2>
+            {isWebexConnected && (
+              <button 
+                onClick={handleSyncMeetings}
+                className="text-xs flex items-center gap-1 bg-white border border-blue-200 text-blue-700 px-3 py-1.5 rounded hover:bg-blue-50 transition-colors"
+              >
+                <RefreshCw className="w-3 h-3" />
+                مزامنة السجلات الآن
+              </button>
+            )}
+          </div>
+          <div className="p-4 flex overflow-x-auto gap-4">
+            {!isWebexConnected ? (
+              <div className="text-sm text-slate-500 w-full text-center py-4">
+                قم بالربط مع Webex لعرض السجلات تلقائياً.
+              </div>
+            ) : meetings.length === 0 ? (
+              <div className="text-sm text-slate-500 w-full text-center py-4">
+                لا توجد سجلات اجتماعات حالياً. اضغط على مزامنة أو ابدأ اجتماعاً جديداً.
+              </div>
+            ) : (
+              meetings.map((meeting) => (
                 <div 
                   key={meeting.id}
                   onClick={() => {
@@ -303,10 +332,10 @@ export default function App() {
                     )}
                   </div>
                 </div>
-              ))}
-            </div>
+              ))
+            )}
           </div>
-        )}
+        </div>
 
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-8 flex-1 min-h-0">
           

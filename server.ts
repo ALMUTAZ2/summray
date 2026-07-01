@@ -393,6 +393,91 @@ async function startServer() {
     }
   });
 
+  // Sync Meetings from Webex
+  app.post("/api/meetings/sync", async (req, res) => {
+    try {
+      const accessToken = await getValidWebexToken();
+      
+      console.log("Syncing meetings from Webex...");
+      // Fetch recordings from the last 7 days
+      const today = new Date();
+      const lastWeek = new Date(today.getTime() - 7 * 24 * 60 * 60 * 1000);
+      
+      const url = `https://webexapis.com/v1/recordings?from=${encodeURIComponent(lastWeek.toISOString())}`;
+      const recRes = await fetch(url, {
+        headers: { Authorization: `Bearer ${accessToken}` }
+      });
+      
+      if (!recRes.ok) {
+        throw new Error(`Failed to fetch recordings from Webex: ${recRes.statusText}`);
+      }
+      
+      const data = await recRes.json();
+      const recordings = data.items || [];
+      
+      const db = getDb();
+      const meetings = db.meetings || [];
+      
+      let newMeetingsAdded = 0;
+      
+      for (const recording of recordings) {
+        // Check if meeting already exists in DB
+        if (!meetings.find((m: any) => m.id === recording.id)) {
+          console.log(`Found new recording to sync: ${recording.topic}`);
+          
+          let transcriptText = "";
+          if (recording.temporaryDirectDownloadLinks && recording.temporaryDirectDownloadLinks.transcriptDownloadLink) {
+            try {
+              const trRes = await fetch(recording.temporaryDirectDownloadLinks.transcriptDownloadLink);
+              if (trRes.ok) {
+                transcriptText = await trRes.text();
+              }
+            } catch (e) {
+              console.error("Failed to download transcript during sync", e);
+            }
+          }
+          
+          if (!transcriptText) {
+            transcriptText = "لا يوجد نص مفرغ متاح لهذا الاجتماع (قد يستغرق Webex وقتاً بعد انتهاء الاجتماع لتوليد النص).";
+          }
+          
+          let reportContent = null;
+          if (transcriptText.length > 50 && !transcriptText.includes("لا يوجد نص مفرغ متاح لهذا الاجتماع")) {
+            console.log("Generating AI summary for synced recording...");
+            try {
+              reportContent = await generateGovernanceReport(transcriptText);
+            } catch (e) {
+              console.error("AI report failed during sync", e);
+            }
+          }
+          
+          meetings.unshift({
+            id: recording.id,
+            topic: recording.topic || "اجتماع غير معنون",
+            createTime: recording.createTime || new Date().toISOString(),
+            transcript: transcriptText,
+            report: reportContent,
+            playbackUrl: recording.playbackUrl
+          });
+          
+          newMeetingsAdded++;
+        }
+      }
+      
+      if (newMeetingsAdded > 0) {
+        updateDb({ meetings });
+        console.log(`Synced ${newMeetingsAdded} new meetings.`);
+      } else {
+        console.log("No new meetings found to sync.");
+      }
+      
+      res.json({ success: true, count: newMeetingsAdded, meetings });
+    } catch (error: any) {
+      console.error("Error syncing meetings:", error);
+      res.status(500).json({ error: error.message });
+    }
+  });
+
   // Get Meetings List
   app.get("/api/meetings", (req, res) => {
     const db = getDb();
