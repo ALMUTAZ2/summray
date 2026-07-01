@@ -24,11 +24,117 @@ const upload = multer({
   limits: { fileSize: 30 * 1024 * 1024 } // 30MB limit
 });
 
+// Simple JSON DB for storing Webex Tokens
+const dbPath = path.join(process.cwd(), "db.json");
+if (!fs.existsSync(dbPath)) {
+  fs.writeFileSync(dbPath, JSON.stringify({ webexTokens: null }));
+}
+function getDb() {
+  return JSON.parse(fs.readFileSync(dbPath, "utf-8"));
+}
+function updateDb(data: any) {
+  const current = getDb();
+  fs.writeFileSync(dbPath, JSON.stringify({ ...current, ...data }, null, 2));
+}
+
 async function startServer() {
   const app = express();
   const PORT = 3000;
 
   app.use(express.json({ limit: "50mb" }));
+
+  // Webex OAuth Configuration
+  const WEBEX_CLIENT_ID = process.env.WEBEX_CLIENT_ID || "C80fb3cd9de1af2235d440d2efe51d0ab34e871218c1eca52b861ddd63651c108";
+  const WEBEX_CLIENT_SECRET = process.env.WEBEX_CLIENT_SECRET || "b8e068eee2b117ff54d97ec567527fe798958d2eceb6b11de8d2197bf6ea2fde";
+  const APP_URL = process.env.APP_URL || `http://localhost:${PORT}`;
+  const WEBEX_REDIRECT_URI = `${APP_URL}/auth/webex/callback`;
+
+  // Get Webex Connection Status
+  app.get("/api/auth/webex/status", (req, res) => {
+    const db = getDb();
+    res.json({ isConnected: !!db.webexTokens });
+  });
+
+  // Login Route - Redirects to Webex
+  app.get("/api/auth/webex/login", (req, res) => {
+    // We request scope for meeting:transcripts_read (or meeting:recordings_read) based on the goal
+    // We'll use a broad scope or standard meeting scopes. Webex scopes are space separated.
+    const scopes = "meeting:recordings_read spark:all"; 
+    
+    const params = new URLSearchParams({
+      client_id: WEBEX_CLIENT_ID,
+      response_type: "code",
+      redirect_uri: WEBEX_REDIRECT_URI,
+      scope: scopes,
+      state: "webex-auth-flow"
+    });
+    
+    res.redirect(`https://webexapis.com/v1/authorize?${params.toString()}`);
+  });
+
+  // OAuth Callback Route
+  app.get("/auth/webex/callback", async (req, res) => {
+    const { code, state } = req.query;
+    
+    if (!code) {
+      return res.status(400).send("Authorization code missing.");
+    }
+    
+    try {
+      const response = await fetch("https://webexapis.com/v1/access_token", {
+        method: "POST",
+        headers: { "Content-Type": "application/x-www-form-urlencoded" },
+        body: new URLSearchParams({
+          grant_type: "authorization_code",
+          client_id: WEBEX_CLIENT_ID,
+          client_secret: WEBEX_CLIENT_SECRET,
+          code: code as string,
+          redirect_uri: WEBEX_REDIRECT_URI
+        })
+      });
+      
+      const data = await response.json();
+      
+      if (!response.ok) {
+        throw new Error(data.message || "Failed to exchange token");
+      }
+      
+      // Store tokens
+      updateDb({ 
+        webexTokens: {
+          access_token: data.access_token,
+          refresh_token: data.refresh_token,
+          expires_in: data.expires_in,
+          refresh_token_expires_in: data.refresh_token_expires_in,
+          updated_at: Date.now()
+        } 
+      });
+      
+      // Send a success page that closes itself or redirect to dashboard
+      res.send(`
+        <html>
+          <body>
+            <h2>Webex connected successfully.</h2>
+            <p>You can close this window and return to the application.</p>
+            <script>
+              setTimeout(() => {
+                window.location.href = "/";
+              }, 3000);
+            </script>
+          </body>
+        </html>
+      `);
+    } catch (error: any) {
+      console.error("Webex OAuth Error:", error);
+      res.status(500).send("Failed to connect to Webex: " + error.message);
+    }
+  });
+
+  // Disconnect Webex Route
+  app.post("/api/auth/webex/disconnect", (req, res) => {
+    updateDb({ webexTokens: null });
+    res.json({ success: true });
+  });
 
   // API route for generating the governance report
   app.post("/api/generate-report", (req, res, next) => {

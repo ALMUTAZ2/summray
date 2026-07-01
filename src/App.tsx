@@ -3,10 +3,10 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import React, { useState, useRef } from 'react';
+import React, { useState, useRef, useEffect } from 'react';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
-import { FileText, Loader2, Send, Download, UploadCloud, X, Mic, FileDown, Copy, Check } from 'lucide-react';
+import { FileText, Loader2, Send, Download, UploadCloud, X, Mic, FileDown, Copy, Check, Video } from 'lucide-react';
 import html2canvas from 'html2canvas';
 import jsPDF from 'jspdf';
 
@@ -20,10 +20,39 @@ export default function App() {
   const [progressMessage, setProgressMessage] = useState('');
   const [isGeneratingPDF, setIsGeneratingPDF] = useState(false);
   const [isCopied, setIsCopied] = useState(false);
+  const [isWebexConnected, setIsWebexConnected] = useState(false);
+  const [isCheckingWebex, setIsCheckingWebex] = useState(true);
 
   const fileInputRef = useRef<HTMLInputElement>(null);
   const reportRef = useRef<HTMLDivElement>(null);
   const pdfReportRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    // Check if Webex is connected
+    fetch('/api/auth/webex/status')
+      .then(res => res.json())
+      .then(data => {
+        setIsWebexConnected(data.isConnected);
+        setIsCheckingWebex(false);
+      })
+      .catch(err => {
+        console.error("Failed to check Webex status:", err);
+        setIsCheckingWebex(false);
+      });
+  }, []);
+
+  const handleConnectWebex = () => {
+    window.location.href = '/api/auth/webex/login';
+  };
+
+  const handleDisconnectWebex = async () => {
+    try {
+      await fetch('/api/auth/webex/disconnect', { method: 'POST' });
+      setIsWebexConnected(false);
+    } catch (err) {
+      console.error("Failed to disconnect Webex:", err);
+    }
+  };
 
   const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     if (e.target.files && e.target.files[0]) {
@@ -181,7 +210,34 @@ export default function App() {
                 <span className="text-[10px] text-slate-400 uppercase tracking-widest">الحوكمة الرقمية</span>
               </div>
             </div>
-            <div className="flex gap-3">
+            <div className="flex items-center gap-4">
+              {!isCheckingWebex && (
+                <div className="flex items-center">
+                  {isWebexConnected ? (
+                    <div className="flex items-center gap-3">
+                      <span className="text-xs font-bold text-emerald-400 flex items-center gap-1.5">
+                        <Check className="w-3.5 h-3.5" />
+                        Webex connected successfully.
+                      </span>
+                      <button 
+                        onClick={handleDisconnectWebex}
+                        className="px-3 py-1 text-[10px] font-bold border border-slate-700 rounded text-slate-400 hover:text-white hover:bg-slate-800 transition-colors"
+                      >
+                        Disconnect
+                      </button>
+                    </div>
+                  ) : (
+                    <button 
+                      onClick={handleConnectWebex}
+                      className="px-4 py-1.5 text-xs font-bold bg-blue-600 hover:bg-blue-700 text-white rounded shadow flex items-center gap-2 transition-colors"
+                    >
+                      <Video className="w-4 h-4" />
+                      Connect Webex
+                    </button>
+                  )}
+                </div>
+              )}
+              <div className="h-6 w-px bg-slate-700 mx-1"></div>
               <button className="px-4 py-1.5 text-xs font-bold border border-slate-700 rounded text-slate-300 hover:bg-slate-800 transition-colors">
                 الإعدادات
               </button>
