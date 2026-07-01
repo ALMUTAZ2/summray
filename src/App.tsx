@@ -22,10 +22,18 @@ export default function App() {
   const [isCopied, setIsCopied] = useState(false);
   const [isWebexConnected, setIsWebexConnected] = useState(false);
   const [isCheckingWebex, setIsCheckingWebex] = useState(true);
+  const [meetings, setMeetings] = useState<any[]>([]);
 
   const fileInputRef = useRef<HTMLInputElement>(null);
   const reportRef = useRef<HTMLDivElement>(null);
   const pdfReportRef = useRef<HTMLDivElement>(null);
+
+  const fetchMeetings = () => {
+    fetch('/api/meetings')
+      .then(res => res.json())
+      .then(data => setMeetings(data))
+      .catch(err => console.error("Failed to fetch meetings:", err));
+  };
 
   useEffect(() => {
     // Check if Webex is connected
@@ -34,6 +42,12 @@ export default function App() {
       .then(data => {
         setIsWebexConnected(data.isConnected);
         setIsCheckingWebex(false);
+        if (data.isConnected) {
+          fetchMeetings();
+          // Poll for new meetings every 30 seconds
+          const interval = setInterval(fetchMeetings, 30000);
+          return () => clearInterval(interval);
+        }
       })
       .catch(err => {
         console.error("Failed to check Webex status:", err);
@@ -254,6 +268,45 @@ export default function App() {
           <span>/</span>
           <span className="text-slate-900 font-medium">توليد تقرير الحوكمة</span>
         </div>
+
+        {meetings.length > 0 && (
+          <div className="mb-6 bg-white shadow-sm border border-slate-200 rounded-lg overflow-hidden shrink-0">
+            <div className="bg-blue-50 border-b border-blue-100 px-6 py-4 flex items-center justify-between">
+              <h2 className="text-sm font-bold text-blue-900 flex items-center gap-2">
+                <Video className="w-4 h-4" />
+                اجتماعات Webex الأخيرة
+              </h2>
+            </div>
+            <div className="p-4 flex overflow-x-auto gap-4">
+              {meetings.map((meeting) => (
+                <div 
+                  key={meeting.id}
+                  onClick={() => {
+                    setTranscript(meeting.transcript);
+                    setReport(meeting.report);
+                  }}
+                  className="min-w-[280px] cursor-pointer p-4 border border-slate-200 rounded-lg hover:border-blue-500 hover:shadow-md transition-all bg-slate-50"
+                >
+                  <h3 className="font-bold text-sm text-slate-800 mb-1 truncate">{meeting.topic}</h3>
+                  <p className="text-xs text-slate-500 mb-3">{new Date(meeting.createTime).toLocaleString('ar-EG')}</p>
+                  <div className="flex gap-2">
+                    {meeting.report ? (
+                      <span className="inline-flex items-center gap-1 px-2 py-1 bg-emerald-100 text-emerald-700 text-[10px] font-bold rounded">
+                        <Check className="w-3 h-3" />
+                        تقرير جاهز
+                      </span>
+                    ) : (
+                      <span className="inline-flex items-center gap-1 px-2 py-1 bg-amber-100 text-amber-700 text-[10px] font-bold rounded">
+                        <Loader2 className="w-3 h-3 animate-spin" />
+                        قيد المعالجة
+                      </span>
+                    )}
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
 
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-8 flex-1 min-h-0">
           

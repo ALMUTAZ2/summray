@@ -37,6 +37,96 @@ function updateDb(data: any) {
   fs.writeFileSync(dbPath, JSON.stringify({ ...current, ...data }, null, 2));
 }
 
+// 🧠 توجيه النظام الحاسم المدمج بقوالب الهيكلة الهندسية وجدول الحوكمة المنظم
+const systemInstruction = `أنت المستشار الإداري ومؤرشف الحوكمة الصارم في "منصة الحوكمة الرقمية (DGP)". 
+
+أمامك نص مفرغ استُخلص آلياً من ملف صوتي لاجتماع، ولكنه يعاني من شوائب تقنية حادة وتداخلت فيه جمل مكررة آلياً خارج سياق الحديث الفعلي (مثل: يُمنع كتابة كلمات غير صحيحة، تبديل الحروف كالصاد بالباء، يجب التركيز التام، إلخ) بالإضافة إلى كلمات مهلوسة وغير مفهومة ناتجة عن تشويش ملف الصوت.
+
+مهمتك الصارمة والوجوبية تكمن في تنفيذ الخطوات التالية بدقة:
+1️⃣ الفلترة والتطهير المطلق: قم بكشط ومسح كافة الجمل البرمجية والتوجيهية المتكررة آلياً المذكورة أعلاه تماماً وبشكل كلي، واحذف أي عبارات أو حروف أجنبية دخيلة لا تنتمي لسياق الاجتماع العربي الفعلي.
+2️⃣ الترميم والتصحيح السياقي: استخلص جوهر الكلام العربي الصحيح المتبقي، وقم بتصحيح الكلمات المقلوبة إملائياً بناءً على السياق الرسمي (مثل: تعديل "عصيلة" إلى "أصيلة"، و"المنطلب" إلى "المنطلق"، و"توطر" إلى "توتر"، و"سفوفنا" إلى "صفوفنا").
+
+بناءً على النص المصفى والنقي تماماً، صغ "تقرير الحوكمة الختامي للاجتماع" الموجه لمدير الإدارة باللغة العربية الفصحى الرصينة، والتزم بالهيكل والتنسيق التالي بـ Markdown ليكون جاهزاً للنسخ المباشر والتحويل الفوري إلى مستند PDF رسمي في واجهة المنصة:
+
+### 🗓️ أولاً: الملخص التنفيذي الشامل
+- **المحور الاستراتيجي للاجتماع:** (صياغة دقيقة ومكثفة في سطر واحد للموضوع والهدف الأساسي للاجتماع).
+- **الخلاصة الإدارية الشاملة:** (تقرير سردي متكامل ومصَفّى بالكامل من الشوائب يدمج مجريات النقاش الفعلي، الأقسام المشاركة، والنتائج الإستراتيجية التي تم التوصل إليها طوال ساعات الاجتماع دون إغفال أي محور جوهري نُوقش).
+
+---
+
+### 🎯 ثانياً: سجل القرارات المعتمدة
+(قم برصد وتدوين كافة القرارات الصارمة والفعّلية التي تم الاتفاق عليها والتصديق عليها خلال الاجتماع بنقاط واضحة متسلسلة. إذا لم تكن هناك قرارات صريحة، اكتب "لا يوجد قرارات معتمدة في هذا الاجتماع"):
+1. [نص القرار الأول الفعلي المستخلص بالكامل]
+2. [نص القرار الثاني الفعلي المستخلص بالكامل]
+
+---
+
+### 📋 ثالثاً: مصفوفة التكليفات ومتابعة المهام
+(استخرج كافة التوصيات الإستراتيجية، أو المساعي والمبادرات المستمرة التي تم الاتفاق على مواصلتها طوال الاجتماع وسجلها في هذا الجدول بالملي. يجب صياغة الجدول بتنسيق Markdown صحيح ومفصل بأعمدة واضحة، وضع المسؤول والمهلة الزمنية بناءً على السياق كالتالي):
+
+| م | التكليف والتوصية الإستراتيجية | المسؤول عن التنفيذ | الإطار الزمني / المهلة |
+| :--- | :--- | :--- | :--- |
+| 1 | تفعيل ومتابعة مقترحات إصلاح وعصرنة جامعة الدول العربية | الأمانة العامة لجامعة الدول العربية | مستمر |
+| 2 | مواصلة المساعي الرامية لتمكين دولة فلسطين من نيل الاعترافات الدولية والعضوية الكاملة | البعثات الدبلوماسية والدول العربية | قيد التنفيذ |
+| 3 | متابعة بلورة مبادرة مشتركة لوقف الاقتتال وإطلاق عملية سياسية شاملة لحل الأزمة في السودان | رئاسة القمة بالتعاون مع الأمم المتحدة والاتحاد الإفريقي | بصفة عاجلة |
+| 4 | اتخاذ تدابير عاجلة وإغاثية لتفادي كارثة إنسانية جراء الجفاف في جيبوتي والصومال | الدول الأعضاء والأمانة العامة للجامعة | فوراً |
+
+---
+
+### 📌 رابعاً: المسائل المعلقة والجلسة القادمة
+- (رصد دقيق لكافة المواضيع أو الملفات الفعليّة التي ناقشها الحضور ولم تُحسم، أو تم تأجيل النظر فيها للاجتماعات القادمة).
+
+⚠️ قيود وقوانين الأمان والتشغيل الصارمة (Groq API):
+1. ⚙️ قفل التوليد الصارم: التزم التزاماً مطلقاً بمستوى (temperature: 0.0)؛ لمنع أي ابتكار أو تخمين لغوي خارجي، مما يجبرك برمجياً على نقل الحقائق الجوهرية المذكورة في صلب الاجتماع الأصلي فقط بعد تصفيتها وتطهيرها.
+2. 🛑 حظر التحريف أو التأويل: يُمنع منعاً باتاً تغيير معاني الكلمات الفردية، أو تفسير المقاصد بناءً على استنتاجات شخصية، أو إضافة تفاصيل لم ترد صراحة على لسان المتحدثين الفعليين.
+3. ابدأ بكتابة التقرير فوراً بناءً على التقسيم الموضح أعلاه، ولا تكتب أي مقدمات ترحيبية أو تعقيبات خارج التقرير ليخرج النص نظيفاً تماماً ومناسباً للمربع النصي وملف الـ PDF في واجهة المنصة.`;
+
+async function generateGovernanceReport(transcript: string) {
+  const prompt = `السجلات الشاملة لأجزاء الاجتماع المراد معالجتها وتنظيفها وفهرستها:\n${transcript}`;
+
+  // مصفوفة النماذج الخاصة بك عبر محرك Groq لضمان وجود Fallback تلقائي
+  const modelsToTry = [
+    "meta-llama/llama-4-scout-17b-16e-instruct",
+    "openai/gpt-oss-120b",
+    "qwen/qwen3.6-27b",
+    "qwen/qwen3-32b",
+    "llama-3.3-70b-versatile",
+    "llama-3.1-70b-versatile"
+  ];
+
+  let reportContent = null;
+  let lastError = null;
+
+  for (const model of modelsToTry) {
+    try {
+      console.log(`Trying model via Groq: ${model}`);
+      const response = await groq.chat.completions.create({
+        model: model,
+        messages: [
+          { role: "system", content: systemInstruction },
+          { role: "user", content: prompt }
+        ],
+        temperature: 0.0, // قفل الأمان المطلق لمنع التخمين وحظر الهلوسة
+      });
+
+      if (response.choices && response.choices.length > 0 && response.choices[0].message) {
+        reportContent = response.choices[0].message.content;
+        console.log(`Successfully generated clean report using model: ${model}`);
+        break; // النجاح، اخرج من الحلقة التكرارية للنماذج
+      }
+    } catch (error: any) {
+      console.error(`Error with model ${model}:`, error.message || error);
+      lastError = error;
+    }
+  }
+
+  if (!reportContent) {
+    throw new Error(lastError?.message || "فشل توليد التقرير من جميع النماذج المحددة المتاحة.");
+  }
+  
+  return reportContent;
+}
+
 async function startServer() {
   const app = express();
   const PORT = 3000;
@@ -117,7 +207,7 @@ async function startServer() {
       state: "webex-auth-flow"
     });
     
-    res.redirect(`https://webexapis.com/v1/authorize?${params.toString()}`);
+    res.redirect("https://webexapis.com/v1/authorize?" + params.toString());
   });
 
   // OAuth Callback Route
@@ -147,6 +237,13 @@ async function startServer() {
         throw new Error(data.message || "Failed to exchange token");
       }
       
+      // Get User ID
+      const userRes = await fetch("https://webexapis.com/v1/people/me", {
+        headers: { Authorization: `Bearer ${data.access_token}` }
+      });
+      const userData = await userRes.json();
+      const userId = userData.id;
+      
       // Store tokens
       updateDb({ 
         webexTokens: {
@@ -154,9 +251,29 @@ async function startServer() {
           refresh_token: data.refresh_token,
           expires_in: data.expires_in,
           refresh_token_expires_in: data.refresh_token_expires_in,
-          updated_at: Date.now()
+          updated_at: Date.now(),
+          user_id: userId
         } 
       });
+      
+      // Try to register webhook
+      try {
+        await fetch("https://webexapis.com/v1/webhooks", {
+          method: "POST",
+          headers: {
+            "Authorization": `Bearer ${data.access_token}`,
+            "Content-Type": "application/json"
+          },
+          body: JSON.stringify({
+            name: "Summray Recording Webhook",
+            targetUrl: "https://summray.onrender.com/api/webhooks/webex",
+            resource: "recordings",
+            event: "created"
+          })
+        });
+      } catch (webhookErr) {
+        console.error("Failed to register webhook (might need more scopes):", webhookErr);
+      }
       
       // Send a success page that closes itself or redirect to dashboard
       res.send(`
@@ -182,6 +299,78 @@ async function startServer() {
   app.post("/api/auth/webex/disconnect", (req, res) => {
     updateDb({ webexTokens: null });
     res.json({ success: true });
+  });
+
+  // Webex Webhook Route
+  app.post("/api/webhooks/webex", async (req, res) => {
+    // Respond immediately to Webex to acknowledge receipt
+    res.status(200).send("OK");
+    
+    try {
+      const { resource, event, data } = req.body;
+      if (resource === "recordings" && event === "created" && data && data.id) {
+        const recordingId = data.id;
+        const accessToken = await getValidWebexToken();
+        
+        console.log(`Processing new Webex recording: ${recordingId}`);
+        
+        // Fetch recording details
+        const recRes = await fetch(`https://webexapis.com/v1/recordings/${recordingId}`, {
+          headers: { Authorization: `Bearer ${accessToken}` }
+        });
+        
+        if (!recRes.ok) {
+          throw new Error(`Failed to fetch recording details: ${recRes.statusText}`);
+        }
+        
+        const recording = await recRes.json();
+
+        // Get transcript if available
+        let transcriptText = "";
+        if (recording.temporaryDirectDownloadLinks && recording.temporaryDirectDownloadLinks.transcriptDownloadLink) {
+          try {
+            const trRes = await fetch(recording.temporaryDirectDownloadLinks.transcriptDownloadLink);
+            if (trRes.ok) {
+              transcriptText = await trRes.text();
+            }
+          } catch (e) {
+            console.error("Failed to download transcript for recording", e);
+          }
+        }
+        
+        if (!transcriptText) {
+          console.log("No transcript available for recording, using fallback text.");
+          transcriptText = "لا يوجد نص مفرغ متاح لهذا الاجتماع.";
+        }
+
+        // Generate AI summary
+        console.log("Generating report from webhook transcript...");
+        const reportContent = await generateGovernanceReport(transcriptText);
+
+        // Save to DB
+        const db = getDb();
+        const meetings = db.meetings || [];
+        meetings.unshift({
+          id: recordingId,
+          topic: recording.topic || "اجتماع غير معنون",
+          createTime: recording.createTime || new Date().toISOString(),
+          transcript: transcriptText,
+          report: reportContent,
+          playbackUrl: recording.playbackUrl
+        });
+        
+        updateDb({ meetings });
+        console.log(`Successfully processed and saved meeting: ${recording.topic}`);
+      }
+    } catch (error) {
+      console.error("Error processing Webex webhook:", error);
+    }
+  });
+
+  // Get Meetings List
+  app.get("/api/meetings", (req, res) => {
+    const db = getDb();
+    res.json(db.meetings || []);
   });
 
   // API route for generating the governance report
@@ -220,96 +409,12 @@ async function startServer() {
         }
       }
 
-      // 🧠 توجيه النظام الحاسم المدمج بقوالب الهيكلة الهندسية وجدول الحوكمة المنظم
-      const systemInstruction = `أنت المستشار الإداري ومؤرشف الحوكمة الصارم في "منصة الحوكمة الرقمية (DGP)". 
-
-أمامك نص مفرغ استُخلص آلياً من ملف صوتي لاجتماع، ولكنه يعاني من شوائب تقنية حادة وتداخلت فيه جمل مكررة آلياً خارج سياق الحديث الفعلي (مثل: يُمنع كتابة كلمات غير صحيحة، تبديل الحروف كالصاد بالباء، يجب التركيز التام، إلخ) بالإضافة إلى كلمات مهلوسة وغير مفهومة ناتجة عن تشويش ملف الصوت.
-
-مهمتك الصارمة والوجوبية تكمن في تنفيذ الخطوات التالية بدقة:
-1️⃣ الفلترة والتطهير المطلق: قم بكشط ومسح كافة الجمل البرمجية والتوجيهية المتكررة آلياً المذكورة أعلاه تماماً وبشكل كلي، واحذف أي عبارات أو حروف أجنبية دخيلة لا تنتمي لسياق الاجتماع العربي الفعلي.
-2️⃣ الترميم والتصحيح السياقي: استخلص جوهر الكلام العربي الصحيح المتبقي، وقم بتصحيح الكلمات المقلوبة إملائياً بناءً على السياق الرسمي (مثل: تعديل "عصيلة" إلى "أصيلة"، و"المنطلب" إلى "المنطلق"، و"توطر" إلى "توتر"، و"سفوفنا" إلى "صفوفنا").
-
-بناءً على النص المصفى والنقي تماماً، صغ "تقرير الحوكمة الختامي للاجتماع" الموجه لمدير الإدارة باللغة العربية الفصحى الرصينة، والتزم بالهيكل والتنسيق التالي بـ Markdown ليكون جاهزاً للنسخ المباشر والتحويل الفوري إلى مستند PDF رسمي في واجهة المنصة:
-
-### 🗓️ أولاً: الملخص التنفيذي الشامل
-- **المحور الاستراتيجي للاجتماع:** (صياغة دقيقة ومكثفة في سطر واحد للموضوع والهدف الأساسي للاجتماع).
-- **الخلاصة الإدارية الشاملة:** (تقرير سردي متكامل ومصَفّى بالكامل من الشوائب يدمج مجريات النقاش الفعلي، الأقسام المشاركة، والنتائج الإستراتيجية التي تم التوصل إليها طوال ساعات الاجتماع دون إغفال أي محور جوهري نُوقش).
-
----
-
-### 🎯 ثانياً: سجل القرارات المعتمدة
-(قم برصد وتدوين كافة القرارات الصارمة والفعّلية التي تم الاتفاق عليها والتصديق عليها خلال الاجتماع بنقاط واضحة متسلسلة. إذا لم تكن هناك قرارات صريحة، اكتب "لا يوجد قرارات معتمدة في هذا الاجتماع"):
-1. [نص القرار الأول الفعلي المستخلص بالكامل]
-2. [نص القرار الثاني الفعلي المستخلص بالكامل]
-
----
-
-### 📋 ثالثاً: مصفوفة التكليفات ومتابعة المهام
-(استخرج كافة التوصيات الإستراتيجية، أو المساعي والمبادرات المستمرة التي تم الاتفاق على مواصلتها طوال الاجتماع وسجلها في هذا الجدول بالملي. يجب صياغة الجدول بتنسيق Markdown صحيح ومفصل بأعمدة واضحة، وضع المسؤول والمهلة الزمنية بناءً على السياق كالتالي):
-
-| م | التكليف والتوصية الإستراتيجية | المسؤول عن التنفيذ | الإطار الزمني / المهلة |
-| :--- | :--- | :--- | :--- |
-| 1 | تفعيل ومتابعة مقترحات إصلاح وعصرنة جامعة الدول العربية | الأمانة العامة لجامعة الدول العربية | مستمر |
-| 2 | مواصلة المساعي الرامية لتمكين دولة فلسطين من نيل الاعترافات الدولية والعضوية الكاملة | البعثات الدبلوماسية والدول العربية | قيد التنفيذ |
-| 3 | متابعة بلورة مبادرة مشتركة لوقف الاقتتال وإطلاق عملية سياسية شاملة لحل الأزمة في السودان | رئاسة القمة بالتعاون مع الأمم المتحدة والاتحاد الإفريقي | بصفة عاجلة |
-| 4 | اتخاذ تدابير عاجلة وإغاثية لتفادي كارثة إنسانية جراء الجفاف في جيبوتي والصومال | الدول الأعضاء والأمانة العامة للجامعة | فوراً |
-
----
-
-### 📌 رابعاً: المسائل المعلقة والجلسة القادمة
-- (رصد دقيق لكافة المواضيع أو الملفات الفعليّة التي ناقشها الحضور ولم تُحسم، أو تم تأجيل النظر فيها للاجتماعات القادمة).
-
-⚠️ قيود وقوانين الأمان والتشغيل الصارمة (Groq API):
-1. ⚙️ قفل التوليد الصارم: التزم التزاماً مطلقاً بمستوى (temperature: 0.0)؛ لمنع أي ابتكار أو تخمين لغوي خارجي، مما يجبرك برمجياً على نقل الحقائق الجوهرية المذكورة في صلب الاجتماع الأصلي فقط بعد تصفيتها وتطهيرها.
-2. 🛑 حظر التحريف أو التأويل: يُمنع منعاً باتاً تغيير معاني الكلمات الفردية، أو تفسير المقاصد بناءً على استنتاجات شخصية، أو إضافة تفاصيل لم ترد صراحة على لسان المتحدثين الفعليين.
-3. ابدأ بكتابة التقرير فوراً بناءً على التقسيم الموضح أعلاه، ولا تكتب أي مقدمات ترحيبية أو تعقيبات خارج التقرير ليخرج النص نظيفاً تماماً ومناسباً للمربع النصي وملف الـ PDF في واجهة المنصة.`;
-
-      const prompt = `السجلات الشاملة لأجزاء الاجتماع المراد معالجتها وتنظيفها وفهرستها:\n${transcript}`;
-
-      // مصفوفة النماذج الخاصة بك عبر محرك Groq لضمان وجود Fallback تلقائي
-      const modelsToTry = [
-        "meta-llama/llama-4-scout-17b-16e-instruct",
-        "openai/gpt-oss-120b",
-        "qwen/qwen3.6-27b",
-        "qwen/qwen3-32b",
-        "llama-3.3-70b-versatile",
-        "llama-3.1-70b-versatile"
-      ];
-
-      let reportContent = null;
-      let lastError = null;
-
-      for (const model of modelsToTry) {
-        try {
-          console.log(`Trying model via Groq: ${model}`);
-          const response = await groq.chat.completions.create({
-            model: model,
-            messages: [
-              { role: "system", content: systemInstruction },
-              { role: "user", content: prompt }
-            ],
-            temperature: 0.0, // قفل الأمان المطلق لمنع التخمين وحظر الهلوسة
-          });
-
-          if (response.choices && response.choices.length > 0 && response.choices[0].message) {
-            reportContent = response.choices[0].message.content;
-            console.log(`Successfully generated clean report using model: ${model}`);
-            break; // النجاح، اخرج من الحلقة التكرارية للنماذج
-          }
-        } catch (error: any) {
-          console.error(`Error with model ${model}:`, error.message || error);
-          lastError = error;
-        }
-      }
-
       // Cleanup local temporary file from disk immediately
       if (audioFile) {
         fs.unlinkSync(audioFile.path);
       }
 
-      if (!reportContent) {
-        throw new Error(lastError?.message || "فشل توليد التقرير من جميع النماذج المحددة المتاحة.");
-      }
+      const reportContent = await generateGovernanceReport(transcript);
 
       // إرسال التقرير المنظف والجدول الممتلئ مع النص المفرغ لـ Frontend
       res.json({ report: reportContent, transcript: transcript });
