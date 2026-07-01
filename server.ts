@@ -106,9 +106,8 @@ async function startServer() {
 
   // Login Route - Redirects to Webex
   app.get("/api/auth/webex/login", (req, res) => {
-    // We request scope for meeting:transcripts_read (or meeting:recordings_read) based on the goal
-    // We'll use a broad scope or standard meeting scopes. Webex scopes are space separated.
-    const scopes = "meeting:recordings_read spark:all"; 
+    // We request specific meeting scopes. Webex scopes are space separated.
+    const scopes = "meeting:recordings_read meeting:transcripts_read meeting:preferences_read spark:people_read"; 
     
     const params = new URLSearchParams({
       client_id: WEBEX_CLIENT_ID,
