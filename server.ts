@@ -511,7 +511,18 @@ if (hook.resource === "meetingTranscripts" && hook.event === "created") {
       if (!recordingsRes.ok) {
          const errText = await recordingsRes.text();
          console.error("Failed to fetch recordings from Webex:", errText);
-         return res.status(recordingsRes.status).json({ error: "Failed to fetch recordings from Webex" });
+         
+         let errorMessage = "فشل جلب الاجتماعات من Webex.";
+         try {
+           const errJson = JSON.parse(errText);
+           if (errJson.message) {
+             errorMessage += ` السبب: ${errJson.message}`;
+           }
+         } catch(e) {
+           errorMessage += ` التفاصيل: ${errText}`;
+         }
+         
+         return res.status(recordingsRes.status).json({ error: errorMessage, details: errText });
       }
       
       const recordingsData = await recordingsRes.json();

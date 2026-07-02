@@ -42,8 +42,11 @@ export default function App() {
     setSyncMessage('جاري المزامنة مع Webex...');
     try {
       const res = await fetch('/api/webex/sync', { method: 'POST' });
-      if (!res.ok) throw new Error('Sync failed');
       const data = await res.json();
+      
+      if (!res.ok) {
+        throw new Error(data.error || 'فشلت المزامنة. يرجى التأكد من الاتصال بـ Webex.');
+      }
       
       await fetchMeetings(); // refresh the local list
       if (data.count > 0) {
@@ -51,10 +54,10 @@ export default function App() {
       } else {
         setSyncMessage('البيانات محدثة. لا توجد اجتماعات جديدة.');
       }
-      setTimeout(() => setSyncMessage(null), 3000);
-    } catch (err) {
-      setSyncMessage('فشلت المزامنة. يرجى التأكد من الاتصال بـ Webex.');
-      setTimeout(() => setSyncMessage(null), 3000);
+      setTimeout(() => setSyncMessage(null), 5000);
+    } catch (err: any) {
+      setSyncMessage(err.message || 'فشلت المزامنة. يرجى التأكد من الاتصال بـ Webex.');
+      setTimeout(() => setSyncMessage(null), 8000);
     } finally {
       setIsSyncing(false);
     }
