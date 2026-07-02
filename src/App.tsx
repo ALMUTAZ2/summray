@@ -37,7 +37,21 @@ export default function App() {
       .catch(err => console.error("Failed to fetch meetings:", err));
   };
 
-
+  const handleSyncMeetings = async () => {
+    setIsSyncing(true);
+    setSyncMessage('جاري استرجاع الاجتماعات...');
+    try {
+      // For now, we just fetch meetings. In a real scenario, this might trigger a webhook or backend sync.
+      await fetchMeetings();
+      setSyncMessage('تمت المزامنة بنجاح');
+      setTimeout(() => setSyncMessage(null), 3000);
+    } catch (err) {
+      setSyncMessage('فشلت المزامنة');
+      setTimeout(() => setSyncMessage(null), 3000);
+    } finally {
+      setIsSyncing(false);
+    }
+  };
 
   useEffect(() => {
     // Check if Webex is connected
@@ -59,8 +73,34 @@ export default function App() {
       });
   }, []);
 
-  const handleConnectWebex = () => {
-    window.location.href = '/api/auth/webex/login';
+  useEffect(() => {
+    const handleMessage = (event: MessageEvent) => {
+      // Allow messages from same origin
+      if (event.origin !== window.location.origin) {
+        return;
+      }
+      if (event.data?.type === 'WEBEX_AUTH_SUCCESS') {
+        setIsWebexConnected(true);
+        fetchMeetings();
+      }
+    };
+    window.addEventListener('message', handleMessage);
+    return () => window.removeEventListener('message', handleMessage);
+  }, []);
+
+  const handleConnectWebex = async () => {
+    try {
+      const response = await fetch('/api/auth/webex/login');
+      if (!response.ok) throw new Error('Failed to get auth URL');
+      const { url } = await response.json();
+      const authWindow = window.open(url, 'webex_oauth', 'width=600,height=700');
+      if (!authWindow) {
+        alert('يرجى السماح بالنوافذ المنبثقة (popups) لتسجيل الدخول إلى Webex.');
+      }
+    } catch (error) {
+      console.error('Webex connect error:', error);
+      alert('حدث خطأ أثناء محاولة الاتصال بـ Webex.');
+    }
   };
 
   const handleDisconnectWebex = async () => {

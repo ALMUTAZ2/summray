@@ -145,7 +145,6 @@ async function startServer() {
   // Webex OAuth Configuration
   const WEBEX_CLIENT_ID = process.env.WEBEX_CLIENT_ID || "C80fb3cd9de1af2235d440d2efe51d0ab34e871218c1eca52b861ddd63651c108";
   const WEBEX_CLIENT_SECRET = process.env.WEBEX_CLIENT_SECRET || "b8e068eee2b117ff54d97ec567527fe798958d2eceb6b11de8d2197bf6ea2fde";
-  const WEBEX_REDIRECT_URI = process.env.WEBEX_REDIRECT_URI || "https://summray.onrender.com/auth/webex/callback";
 
   // Helper function to get valid token, refreshing if necessary
   async function getValidWebexToken() {
@@ -203,26 +202,35 @@ async function startServer() {
     res.json({ isConnected: !!db.webexTokens });
   });
 
-  // Login Route - Redirects to Webex
+  // Login Route - Returns Webex Auth URL
   app.get("/api/auth/webex/login", (req, res) => {
+    const host = req.get('host');
+    const protocol = req.headers['x-forwarded-proto'] || req.protocol;
+    const dynamicRedirectUri = process.env.WEBEX_REDIRECT_URI || `${protocol}://${host}/auth/webex/callback`;
+
     // We request specific meeting scopes. Webex scopes are space separated.
     const scopes = "meeting:recordings_read meeting:transcripts_read meeting:preferences_read spark:people_read"; 
     
     const params = new URLSearchParams({
       client_id: WEBEX_CLIENT_ID,
       response_type: "code",
-      redirect_uri: WEBEX_REDIRECT_URI,
+      redirect_uri: dynamicRedirectUri,
       scope: scopes,
       state: "webex-auth-flow"
     });
     
-    res.redirect("https://webexapis.com/v1/authorize?" + params.toString());
+    res.json({ url: "https://webexapis.com/v1/authorize?" + params.toString() });
   });
 
   // OAuth Callback Route
-  app.get("/auth/webex/callback", async (req, res) => {
+  app.get(["/auth/webex/callback", "/auth/webex/callback/"], async (req, res) => {
     const { code, state } = req.query;
     
+    const host = req.get('host');
+    const protocol = req.headers['x-forwarded-proto'] || req.protocol;
+    const dynamicRedirectUri = process.env.WEBEX_REDIRECT_URI || `${protocol}://${host}/auth/webex/callback`;
+    const dynamicWebhookUrl = `${protocol}://${host}/api/webhooks/webex`;
+
     if (!code) {
       return res.status(400).send("Authorization code missing.");
     }
@@ -236,7 +244,7 @@ async function startServer() {
           client_id: WEBEX_CLIENT_ID,
           client_secret: WEBEX_CLIENT_SECRET,
           code: code as string,
-          redirect_uri: WEBEX_REDIRECT_URI
+          redirect_uri: dynamicRedirectUri
         })
       });
       
@@ -268,7 +276,7 @@ async function startServer() {
       // Try to register webhook
       try {
         console.log("Attempting to register Webex webhook...");
-        const targetUrl = "https://summray.onrender.com/api/webhooks/webex";
+        const targetUrl = dynamicWebhookUrl;
         console.log(`Using webhook targetUrl: ${targetUrl}`);
         
         // Fetch existing hooks to reuse/cleanup
@@ -365,9 +373,14 @@ async function startServer() {
             <h2>Webex connected successfully.</h2>
             <p>You can close this window and return to the application.</p>
             <script>
-              setTimeout(() => {
-                window.location.href = "/";
-              }, 3000);
+              if (window.opener) {
+                window.opener.postMessage({ type: 'WEBEX_AUTH_SUCCESS' }, '*');
+                window.close();
+              } else {
+                setTimeout(() => {
+                  window.location.href = "/";
+                }, 3000);
+              }
             </script>
           </body>
         </html>
@@ -580,6 +593,10 @@ async function startServer() {
         return res.status(401).json({ error: "No valid token" });
       }
 
+      const host = req.get('host');
+      const protocol = req.headers['x-forwarded-proto'] || req.protocol;
+      const dynamicWebhookUrl = `${protocol}://${host}/api/webhooks/webex`;
+
       const resources = ['meetingTranscripts'];
       const results = [];
 
@@ -592,7 +609,7 @@ async function startServer() {
           },
           body: JSON.stringify({
             name: "Test Hook " + r,
-            targetUrl: "https://summray.onrender.com/api/webhooks/webex",
+            targetUrl: dynamicWebhookUrl,
             resource: r,
             event: "created"
           })
@@ -624,6 +641,10 @@ async function startServer() {
         return res.status(401).json({ error: "No valid token" });
       }
 
+      const host = req.get('host');
+      const protocol = req.headers['x-forwarded-proto'] || req.protocol;
+      const targetUrl = `${protocol}://${host}/api/webhooks/webex`;
+
       console.log("Fetching existing webhooks...");
       const listRes = await fetch("https://webexapis.com/v1/webhooks", {
         headers: { Authorization: `Bearer ${accessToken}` }
@@ -635,7 +656,7 @@ async function startServer() {
       let foundHook = null;
       // Delete old ones and find ours
       for (const hook of existingHooks) {
-        if (hook.targetUrl === "https://summray.onrender.com/api/webhooks/webex") {
+        if (hook.targetUrl === targetUrl) {
           // If we found a matching hook, check if it's the right resource and event
           if (hook.resource === "meetingTranscripts" && hook.event === "created") {
             foundHook = hook;
@@ -654,8 +675,6 @@ async function startServer() {
            });
         }
       }
-
-      const targetUrl = "https://summray.onrender.com/api/webhooks/webex";
       
       let createdHook = null;
       if (!foundHook) {
