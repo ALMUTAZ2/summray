@@ -229,7 +229,7 @@ async function startServer() {
     const host = req.get('host');
     const protocol = req.headers['x-forwarded-proto'] || req.protocol;
     const dynamicRedirectUri = process.env.WEBEX_REDIRECT_URI || `${protocol}://${host}/auth/webex/callback`;
-    const dynamicWebhookUrl = `${protocol}://${host}/api/webhooks/webex`;
+    const dynamicWebhookUrl = "https://summray.onrender.com/api/webhooks/webex";
 
     if (!code) {
       return res.status(400).send("Authorization code missing.");
