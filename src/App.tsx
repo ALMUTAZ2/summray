@@ -37,25 +37,6 @@ export default function App() {
       .catch(err => console.error("Failed to fetch meetings:", err));
   };
 
-  const handleSyncMeetings = async () => {
-    setIsSyncing(true);
-    setSyncMessage(null);
-    try {
-      const res = await fetch('/api/meetings/sync', { method: 'POST' });
-      const data = await res.json();
-      if (res.ok) {
-        setSyncMessage(`تمت المزامنة: ${data.count} اجتماعات محدثة`);
-        fetchMeetings();
-      } else {
-        setSyncMessage(`فشل: ${data.error}`);
-      }
-    } catch (e: any) {
-      setSyncMessage(`خطأ: ${e.message}`);
-    } finally {
-      setIsSyncing(false);
-    }
-  };
-
 
 
   useEffect(() => {
@@ -63,9 +44,9 @@ export default function App() {
     fetch('/api/auth/webex/status')
       .then(res => res.json())
       .then(data => {
-        setIsWebexConnected(data.oauthConnected);
+        setIsWebexConnected(data.isConnected);
         setIsCheckingWebex(false);
-        if (data.oauthConnected) {
+        if (data.isConnected) {
           fetchMeetings();
           // Poll for new meetings every 30 seconds
           const interval = setInterval(fetchMeetings, 30000);
@@ -321,7 +302,11 @@ export default function App() {
             </div>
           </div>
           <div className="p-4 flex overflow-x-auto gap-4">
-            {meetings.length === 0 ? (
+            {!isWebexConnected ? (
+              <div className="text-sm text-slate-500 w-full text-center py-4">
+                قم بالربط مع Webex لعرض السجلات تلقائياً.
+              </div>
+            ) : meetings.length === 0 ? (
               <div className="text-sm text-slate-500 w-full text-center py-4">
                 لا توجد سجلات اجتماعات حالياً. اضغط على مزامنة أو ابدأ اجتماعاً جديداً.
               </div>
