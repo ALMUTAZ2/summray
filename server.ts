@@ -143,8 +143,8 @@ async function startServer() {
   app.use(express.json({ limit: "50mb" }));
 
   // Webex OAuth Configuration
-  const WEBEX_CLIENT_ID = process.env.WEBEX_CLIENT_ID || "C80fb3cd9de1af2235d440d2efe51d0ab34e871218c1eca52b861ddd63651c108";
-  const WEBEX_CLIENT_SECRET = process.env.WEBEX_CLIENT_SECRET || "b8e068eee2b117ff54d97ec567527fe798958d2eceb6b11de8d2197bf6ea2fde";
+  const WEBEX_CLIENT_ID = process.env.WEBEX_CLIENT_ID || "Cc37ef681b5c69899fa2850881d31c8d90e080d57891ab043128755e78756e67a";
+  const WEBEX_CLIENT_SECRET = process.env.WEBEX_CLIENT_SECRET || "c1ad1999d35fc40645891cde6c62a8f583c4291e666988760324e48e54b6af0a";
 
   // Helper function to get valid token, refreshing if necessary
   async function getValidWebexToken() {
@@ -232,7 +232,8 @@ async function startServer() {
     const dynamicWebhookUrl = "https://summray.onrender.com/api/webhooks/webex";
 
     if (!code) {
-      return res.status(400).send("Authorization code missing.");
+      console.error("OAuth callback error, query:", req.query);
+      return res.status(400).send(`Authorization error: ${req.query.error_description || req.query.error || "Authorization code missing."}`);
     }
     
     try {
