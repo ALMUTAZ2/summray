@@ -291,11 +291,12 @@ async function startServer() {
           
           for (const hook of existingHooks) {
             if (hook.targetUrl === targetUrl) {
-              if (hook.resource === "recordings" && hook.event === "created") {
-                foundHook = hook;
-              } else {
-                 await fetch(`https://webexapis.com/v1/webhooks/${hook.id}`, { method: "DELETE", headers: { Authorization: `Bearer ${data.access_token}` } });
-              }
+             //  الجديد الصحيح:
+if (hook.resource === "meetingTranscripts" && hook.event === "created") {
+   foundHook = hook;
+} else {
+   await fetch(`https://webexapis.com/v1/webhooks/${hook.id}`, { method: "DELETE", headers: { Authorization: `Bearer ${data.access_token}` } });
+}
             } else if (hook.name.startsWith("Summray")) {
                await fetch(`https://webexapis.com/v1/webhooks/${hook.id}`, { method: "DELETE", headers: { Authorization: `Bearer ${data.access_token}` } });
             }
@@ -312,7 +313,7 @@ async function startServer() {
             body: JSON.stringify({
               name: "Summray Recording Webhook",
               targetUrl: targetUrl,
-              resource: "recordings",
+              resource: "meetingTranscripts",
               event: "created"
             })
           });
@@ -397,21 +398,22 @@ async function startServer() {
     res.json({ success: true });
   });
 
+  
   // Webex Webhook Route
   app.post("/api/webhooks/webex", async (req, res) => {
     console.log("================ WEBEX WEBHOOK RECEIVED ================");
-    console.log("Headers:", JSON.stringify(req.headers, null, 2));
-    console.log("Payload:", JSON.stringify(req.body, null, 2));
     
-    // Respond immediately to Webex to acknowledge receipt
+    // الرد الفوري المباشر على سيرفر ويبكس لمنع تجميد الطلب
     res.status(200).send("OK");
     
-    try {
-      const { resource, event, data } = req.body;
-      console.log(`Processing webhook: resource=${resource}, event=${event}`);
-      
-      updateDb({ lastWebhookReceived: Date.now() });
-      
+    // نقل المعالجة بالكامل إلى الخلفية عبر دالة مستقلة فورية التنفيذ
+    (async () => {
+      try {
+        const { resource, event, data } = req.body;
+        console.log(`Processing webhook in background: resource=${resource}, event=${event}`);
+        
+        updateDb({ lastWebhookReceived: Date.now() });
+        
         if (resource === "meetingTranscripts" && event === "created" && data && data.meetingId) {
           const transcriptMeetingId = data.meetingId;
           console.log(`Processing meetingTranscripts created event for meetingId: ${transcriptMeetingId}`);
@@ -425,7 +427,6 @@ async function startServer() {
             });
             if (transcriptRes.ok) {
               const transcriptData = await transcriptRes.json();
-              console.log("meetingTranscripts webhook API response:", JSON.stringify(transcriptData, null, 2));
               if (transcriptData.items && transcriptData.items.length > 0) {
                  const tItem = transcriptData.items[0];
                  if (tItem.downloadLink) {
@@ -434,22 +435,13 @@ async function startServer() {
                     if (dlRes.ok) {
                        const vttContent = await dlRes.text();
                        transcriptText = parseVtt(vttContent);
-                       console.log(`Successfully fetched and parsed VTT from meetingTranscripts API. Length: ${transcriptText.length}`);
-                    } else {
-                       console.error(`Failed to fetch VTT. Status: ${dlRes.status}, ${dlRes.statusText}`);
+                       console.log(`Successfully fetched and parsed VTT. Length: ${transcriptText.length}`);
                     }
-                 } else {
-                    console.log("No downloadLink available in transcript item.");
                  }
-              } else {
-                 console.log("No transcript items found in response.");
               }
-            } else {
-              const errorText = await transcriptRes.text();
-              console.error(`Failed to fetch from meetingTranscripts API. Status: ${transcriptRes.status}, Error: ${errorText}`);
             }
           } catch (e) {
-             console.error("Error fetching from meetingTranscripts API in webhook", e);
+             console.error("Error fetching from meetingTranscripts API in background", e);
           }
 
           if (transcriptText) {
@@ -469,32 +461,29 @@ async function startServer() {
             }
             
             if (existingIndex !== -1) {
-               console.log("Updating existing meeting with new transcript and report...");
+               console.log("Updating existing meeting...");
                meetings[existingIndex].transcript = transcriptText;
                meetings[existingIndex].report = reportContent || meetings[existingIndex].report;
                updateDb({ meetings });
-               console.log("Meeting updated successfully.");
             } else {
-               console.log("Meeting not found in DB, creating a new entry from transcript...");
+               console.log("Creating a new entry from transcript...");
                meetings.unshift({
-                 id: transcriptMeetingId, // use meetingId as ID since we don't have recording ID
+                 id: transcriptMeetingId,
                  meetingId: transcriptMeetingId,
-                 topic: "اجتماع تم استخراج نصه",
+                 topic: "اجتماع تم استخراج نصه आلياً",
                  createTime: new Date().toISOString(),
                  transcript: transcriptText,
                  report: reportContent,
                  playbackUrl: ""
                });
                updateDb({ meetings });
-               console.log("New meeting created from transcript successfully.");
             }
           }
-        } else {
-          console.log("Webhook skipped. Event not handled by this integration.");
         }
-    } catch (error) {
-      console.error("Error processing Webex webhook:", error);
-    }
+      } catch (backgroundError) {
+        console.error("Error in asynchronous background webhook processing:", backgroundError);
+      }
+    })();
   });
 
 
@@ -732,7 +721,7 @@ async function startServer() {
 
       const host = req.get('host');
       const protocol = req.headers['x-forwarded-proto'] || req.protocol;
-      const targetUrl = `${protocol}://${host}/api/webhooks/webex`;
+      const targetUrl = "https://summray.onrender.com/api/webhooks/webex";
 
       console.log("Fetching existing webhooks...");
       const listRes = await fetch("https://webexapis.com/v1/webhooks", {
