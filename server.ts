@@ -9,6 +9,15 @@ import fs from "fs";
 // Initialize Groq client with the provided API key
 const groq = new Groq({ apiKey: "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" });
 
+const parseVtt = (vtt: string): string => {
+  return vtt
+    .split('\n')
+    .filter(line => !line.includes('-->') && !line.startsWith('WEBVTT') && line.trim() !== '' && !line.match(/^[0-9a-fA-F-]+$/))
+    .join(' ')
+    .replace(/<[^>]+>/g, '')
+    .trim();
+};
+
 const storage = multer.diskStorage({
   destination: function (req, file, cb) {
     cb(null, os.tmpdir());
@@ -259,23 +268,78 @@ async function startServer() {
       // Try to register webhook
       try {
         console.log("Attempting to register Webex webhook...");
-        const whRes = await fetch("https://webexapis.com/v1/webhooks", {
+        const targetUrl = "https://summray.onrender.com/api/webhooks/webex";
+        console.log(`Using webhook targetUrl: ${targetUrl}`);
+        
+        // Fetch existing hooks to reuse/cleanup
+        const listRes = await fetch("https://webexapis.com/v1/webhooks", {
+          headers: { Authorization: `Bearer ${data.access_token}` }
+        });
+        
+        let foundHook = null;
+        if (listRes.ok) {
+          const listData = await listRes.json();
+          const existingHooks = listData.items || [];
+          
+          for (const hook of existingHooks) {
+            if (hook.targetUrl === targetUrl) {
+              if (hook.resource === "meetingRecordings" && hook.event === "created") {
+                foundHook = hook;
+              } else {
+                 await fetch(`https://webexapis.com/v1/webhooks/${hook.id}`, { method: "DELETE", headers: { Authorization: `Bearer ${data.access_token}` } });
+              }
+            } else if (hook.name.startsWith("Summray")) {
+               await fetch(`https://webexapis.com/v1/webhooks/${hook.id}`, { method: "DELETE", headers: { Authorization: `Bearer ${data.access_token}` } });
+            }
+          }
+        }
+        
+        if (!foundHook) {
+          const whRes = await fetch("https://webexapis.com/v1/webhooks", {
+            method: "POST",
+            headers: {
+              "Authorization": `Bearer ${data.access_token}`,
+              "Content-Type": "application/json"
+            },
+            body: JSON.stringify({
+              name: "Summray MeetingRecordings Webhook",
+              targetUrl: targetUrl,
+              resource: "meetingRecordings",
+              event: "created"
+            })
+          });
+          const newHook = await whRes.json();
+          console.log("Webhook Registered successfully:");
+          console.log("- Webhook ID:", newHook.id);
+          console.log("- Resource:", newHook.resource);
+          console.log("- Event:", newHook.event);
+          console.log("- Target URL:", newHook.targetUrl);
+          updateDb({ webhookRegistered: true, webhookDetails: newHook });
+        } else {
+          console.log("Webhook Registered successfully:");
+          console.log("- Webhook ID:", foundHook.id);
+          console.log("- Resource:", foundHook.resource);
+          console.log("- Event:", foundHook.event);
+          console.log("- Target URL:", foundHook.targetUrl);
+          updateDb({ webhookRegistered: true, webhookDetails: foundHook });
+        }
+        
+        // Also register for transcripts created just in case
+        const trWhRes = await fetch("https://webexapis.com/v1/webhooks", {
           method: "POST",
           headers: {
             "Authorization": `Bearer ${data.access_token}`,
             "Content-Type": "application/json"
           },
           body: JSON.stringify({
-            name: "Summray Recording Webhook",
-            targetUrl: "https://summray.onrender.com/api/webhooks/webex",
-            resource: "recordings",
+            name: "Summray Transcript Webhook",
+            targetUrl: targetUrl,
+            resource: "meetingTranscripts",
             event: "created"
           })
         });
         
-        const whStatus = whRes.status;
-        const whText = await whRes.text();
-        console.log(`Webhook registration response: ${whStatus} - ${whText}`);
+        console.log(`Webhook transcript registration response: ${trWhRes.status}`);
       } catch (webhookErr) {
         console.error("Exception while registering webhook:", webhookErr);
       }
@@ -319,75 +383,210 @@ async function startServer() {
       const { resource, event, data } = req.body;
       console.log(`Processing webhook: resource=${resource}, event=${event}`);
       
-      if (resource === "recordings" && event === "created" && data && data.id) {
-        const recordingId = data.id;
-        console.log(`Getting valid Webex token for recording: ${recordingId}`);
-        const accessToken = await getValidWebexToken();
-        
-        console.log(`Fetching recording details for ID: ${recordingId}`);
-        const recRes = await fetch(`https://webexapis.com/v1/recordings/${recordingId}`, {
-          headers: { Authorization: `Bearer ${accessToken}` }
-        });
-        
-        if (!recRes.ok) {
-          console.error(`Failed to fetch recording details. Status: ${recRes.status}, ${recRes.statusText}`);
-          throw new Error(`Failed to fetch recording details: ${recRes.statusText}`);
-        }
-        
-        const recording = await recRes.json();
-        console.log("Recording Details received:", JSON.stringify(recording, null, 2));
-
-        // Get transcript if available
-        let transcriptText = "";
-        if (recording.temporaryDirectDownloadLinks && recording.temporaryDirectDownloadLinks.transcriptDownloadLink) {
-          console.log(`Downloading transcript from: ${recording.temporaryDirectDownloadLinks.transcriptDownloadLink}`);
+      updateDb({ lastWebhookReceived: Date.now() });
+      
+        if (resource === "meetingTranscripts" && event === "created" && data && data.meetingId) {
+          const transcriptMeetingId = data.meetingId;
+          console.log(`Processing meetingTranscripts created event for meetingId: ${transcriptMeetingId}`);
+          const accessToken = await getValidWebexToken();
+          
+          let transcriptText = "";
           try {
-            const trRes = await fetch(recording.temporaryDirectDownloadLinks.transcriptDownloadLink);
-            if (trRes.ok) {
-              transcriptText = await trRes.text();
-              console.log(`Successfully downloaded transcript. Length: ${transcriptText.length} characters.`);
+            console.log(`Checking Webex Meeting Transcript API for meetingId: ${transcriptMeetingId}`);
+            const transcriptRes = await fetch(`https://webexapis.com/v1/meetingTranscripts?meetingId=${transcriptMeetingId}`, {
+              headers: { Authorization: `Bearer ${accessToken}` }
+            });
+            if (transcriptRes.ok) {
+              const transcriptData = await transcriptRes.json();
+              console.log("meetingTranscripts webhook API response:", JSON.stringify(transcriptData, null, 2));
+              if (transcriptData.items && transcriptData.items.length > 0) {
+                 const tItem = transcriptData.items[0];
+                 if (tItem.downloadLink) {
+                    console.log(`Fetching VTT from downloadLink: ${tItem.downloadLink}`);
+                    const dlRes = await fetch(tItem.downloadLink, { headers: { Authorization: `Bearer ${accessToken}` } });
+                    if (dlRes.ok) {
+                       const vttContent = await dlRes.text();
+                       transcriptText = parseVtt(vttContent);
+                       console.log(`Successfully fetched and parsed VTT from meetingTranscripts API. Length: ${transcriptText.length}`);
+                    } else {
+                       console.error(`Failed to fetch VTT. Status: ${dlRes.status}, ${dlRes.statusText}`);
+                    }
+                 } else {
+                    console.log("No downloadLink available in transcript item.");
+                 }
+              } else {
+                 console.log("No transcript items found in response.");
+              }
             } else {
-              console.error(`Failed to download transcript. Status: ${trRes.status}`);
+              const errorText = await transcriptRes.text();
+              console.error(`Failed to fetch from meetingTranscripts API. Status: ${transcriptRes.status}, Error: ${errorText}`);
             }
           } catch (e) {
-            console.error("Exception while downloading transcript for recording", e);
+             console.error("Error fetching from meetingTranscripts API in webhook", e);
           }
-        } else {
-           console.log("No transcriptDownloadLink found in recording.temporaryDirectDownloadLinks");
-        }
-        
-        if (!transcriptText) {
-          console.log("No transcript available for recording, using fallback text.");
-          transcriptText = "لا يوجد نص مفرغ متاح لهذا الاجتماع.";
-        }
 
-        // Generate AI summary
-        console.log("Generating report from webhook transcript...");
-        try {
-          const reportContent = await generateGovernanceReport(transcriptText);
-          console.log("Successfully generated AI summary.");
-
-          // Save to DB
-          console.log("Saving meeting to database...");
-          const db = getDb();
-          const meetings = db.meetings || [];
-          meetings.unshift({
-            id: recordingId,
-            topic: recording.topic || "اجتماع غير معنون",
-            createTime: recording.createTime || new Date().toISOString(),
-            transcript: transcriptText,
-            report: reportContent,
-            playbackUrl: recording.playbackUrl
+          if (transcriptText) {
+            updateDb({ lastTranscriptImported: Date.now() });
+            const db = getDb();
+            const meetings = db.meetings || [];
+            const existingIndex = meetings.findIndex((m: any) => m.meetingId === transcriptMeetingId || m.id === transcriptMeetingId);
+            
+            let reportContent = null;
+            console.log("Generating AI summary for updated transcript from webhook...");
+            try {
+              reportContent = await generateGovernanceReport(transcriptText);
+              updateDb({ lastSummaryGenerated: Date.now() });
+              console.log("Successfully generated AI summary.");
+            } catch (reportError) {
+              console.error("Error generating AI report:", reportError);
+            }
+            
+            if (existingIndex !== -1) {
+               console.log("Updating existing meeting with new transcript and report...");
+               meetings[existingIndex].transcript = transcriptText;
+               meetings[existingIndex].report = reportContent || meetings[existingIndex].report;
+               updateDb({ meetings });
+               console.log("Meeting updated successfully.");
+            } else {
+               console.log("Meeting not found in DB, creating a new entry from transcript...");
+               meetings.unshift({
+                 id: transcriptMeetingId, // use meetingId as ID since we don't have recording ID
+                 meetingId: transcriptMeetingId,
+                 topic: "اجتماع تم استخراج نصه",
+                 createTime: new Date().toISOString(),
+                 transcript: transcriptText,
+                 report: reportContent,
+                 playbackUrl: ""
+               });
+               updateDb({ meetings });
+               console.log("New meeting created from transcript successfully.");
+            }
+          }
+        }
+        else if ((resource === "recordings" || resource === "meetingRecordings") && event === "created" && data && data.id) {
+          const recordingId = data.id;
+          console.log(`Getting valid Webex token for recording: ${recordingId}`);
+          const accessToken = await getValidWebexToken();
+          
+          console.log(`Fetching recording details for ID: ${recordingId}`);
+          const recRes = await fetch(`https://webexapis.com/v1/recordings/${recordingId}`, {
+            headers: { Authorization: `Bearer ${accessToken}` }
           });
           
-          updateDb({ meetings });
-          console.log(`Successfully processed and saved meeting: ${recording.topic}`);
-        } catch (reportError) {
-          console.error("Error generating AI report:", reportError);
+          if (!recRes.ok) {
+            console.error(`Failed to fetch recording details. Status: ${recRes.status}, ${recRes.statusText}`);
+            throw new Error(`Failed to fetch recording details: ${recRes.statusText}`);
+          }
+          
+          const recording = await recRes.json();
+          console.log("Recording Details received:", JSON.stringify(recording, null, 2));
+  
+          // Get transcript if available
+          let transcriptText = "";
+          
+          // TRY MEETING TRANSCRIPT API FIRST
+          try {
+            console.log(`Checking Webex Meeting Transcript API for meetingId: ${recording.meetingId || data.meetingId || recordingId}`);
+            const transcriptRes = await fetch(`https://webexapis.com/v1/meetingTranscripts?meetingId=${recording.meetingId || data.meetingId || recordingId}`, {
+              headers: { Authorization: `Bearer ${accessToken}` }
+            });
+            if (transcriptRes.ok) {
+              const transcriptData = await transcriptRes.json();
+              console.log("meetingTranscripts API response:", JSON.stringify(transcriptData, null, 2));
+              if (transcriptData.items && transcriptData.items.length > 0) {
+                 const tItem = transcriptData.items[0];
+                 if (tItem.downloadLink) {
+                    const dlRes = await fetch(tItem.downloadLink, { headers: { Authorization: `Bearer ${accessToken}` } });
+                    if (dlRes.ok) {
+                       const vttContent = await dlRes.text();
+                       transcriptText = parseVtt(vttContent);
+                       console.log(`Successfully fetched and parsed VTT from meetingTranscripts API. Length: ${transcriptText.length}`);
+                    }
+                 }
+              }
+            } else {
+               console.log(`meetingTranscripts API not available. Status: ${transcriptRes.status}`);
+            }
+          } catch (e) {
+             console.error("Error fetching from meetingTranscripts API", e);
+          }
+  
+          if (!transcriptText && recording.temporaryDirectDownloadLinks && recording.temporaryDirectDownloadLinks.transcriptDownloadLink) {
+            console.log(`Downloading transcript from: ${recording.temporaryDirectDownloadLinks.transcriptDownloadLink}`);
+            try {
+              const trRes = await fetch(recording.temporaryDirectDownloadLinks.transcriptDownloadLink);
+              if (trRes.ok) {
+                const vttContent = await trRes.text();
+                if (vttContent.includes("WEBVTT")) {
+                   transcriptText = parseVtt(vttContent);
+                } else {
+                   transcriptText = vttContent;
+                }
+                console.log(`Successfully downloaded transcript. Length: ${transcriptText.length} characters.`);
+              } else {
+                console.error(`Failed to download transcript. Status: ${trRes.status}`);
+              }
+            } catch (e) {
+              console.error("Exception while downloading transcript for recording", e);
+            }
+          } else if (!transcriptText) {
+             console.log("No transcriptDownloadLink found in recording.temporaryDirectDownloadLinks");
+          }
+          
+          if (!transcriptText) {
+            console.log("No transcript available for recording, using fallback text.");
+            transcriptText = "لا يوجد نص مفرغ متاح لهذا الاجتماع.";
+          }
+  
+          if (transcriptText && !transcriptText.includes("لا يوجد نص مفرغ")) {
+            updateDb({ lastTranscriptImported: Date.now() });
+          }
+  
+          // Generate AI summary
+          console.log("Generating report from webhook transcript...");
+          try {
+            const reportContent = await generateGovernanceReport(transcriptText);
+            updateDb({ lastSummaryGenerated: Date.now() });
+            console.log("Successfully generated AI summary.");
+  
+            // Save to DB
+            console.log("Saving meeting to database...");
+            const db = getDb();
+            const meetings = db.meetings || [];
+            
+            // Avoid duplicate if meetingTranscripts created it first
+            const existingIndex = meetings.findIndex((m: any) => m.id === recordingId || (recording.meetingId && m.meetingId === recording.meetingId));
+            
+            if (existingIndex !== -1) {
+              // Update existing
+              meetings[existingIndex].id = recordingId;
+              meetings[existingIndex].topic = recording.topic || meetings[existingIndex].topic;
+              meetings[existingIndex].playbackUrl = recording.playbackUrl || meetings[existingIndex].playbackUrl;
+              if (transcriptText && !transcriptText.includes("لا يوجد نص مفرغ")) {
+                meetings[existingIndex].transcript = transcriptText;
+                meetings[existingIndex].report = reportContent;
+              }
+              console.log("Updated existing meeting from recording event");
+            } else {
+              meetings.unshift({
+                id: recordingId,
+                meetingId: recording.meetingId || data.meetingId,
+                topic: recording.topic || "اجتماع غير معنون",
+                createTime: recording.createTime || new Date().toISOString(),
+                transcript: transcriptText,
+                report: reportContent,
+                playbackUrl: recording.playbackUrl
+              });
+              console.log(`Successfully processed and saved new meeting: ${recording.topic}`);
+            }
+            
+            updateDb({ meetings });
+          } catch (reportError) {
+            console.error("Error generating AI report:", reportError);
+          }
+        } else {
+          console.log("Webhook skipped. Event not handled by this integration.");
         }
-      } else {
-        console.log("Webhook skipped. Not a 'recordings created' event with valid ID.");
-      }
     } catch (error) {
       console.error("Error processing Webex webhook:", error);
     }
@@ -399,11 +598,11 @@ async function startServer() {
       const accessToken = await getValidWebexToken();
       
       console.log("Syncing meetings from Webex...");
-      // Fetch recordings from the last 7 days
+      // Fetch recordings from the last 30 days (Webex API limit for from/to difference)
       const today = new Date();
-      const lastWeek = new Date(today.getTime() - 7 * 24 * 60 * 60 * 1000);
+      const lastMonth = new Date(today.getTime() - 29 * 24 * 60 * 60 * 1000);
       
-      const url = `https://webexapis.com/v1/recordings?from=${encodeURIComponent(lastWeek.toISOString())}`;
+      const url = `https://webexapis.com/v1/recordings?from=${encodeURIComponent(lastMonth.toISOString())}&max=100`;
       const recRes = await fetch(url, {
         headers: { Authorization: `Bearer ${accessToken}` }
       });
@@ -420,17 +619,94 @@ async function startServer() {
       
       let newMeetingsAdded = 0;
       
+      try {
+        console.log("Ensuring webhooks are registered to current URL...");
+        const host = req.get('host');
+        const protocol = req.headers['x-forwarded-proto'] || req.protocol;
+        const targetUrl = `${protocol}://${host}/api/webhooks/webex`;
+        
+        // Let's just create them again, Webex allows multiple or updates them
+        await fetch("https://webexapis.com/v1/webhooks", {
+          method: "POST",
+          headers: { "Authorization": `Bearer ${accessToken}`, "Content-Type": "application/json" },
+          body: JSON.stringify({ name: "Summray Recording Webhook", targetUrl, resource: "recordings", event: "created" })
+        });
+        await fetch("https://webexapis.com/v1/webhooks", {
+          method: "POST",
+          headers: { "Authorization": `Bearer ${accessToken}`, "Content-Type": "application/json" },
+          body: JSON.stringify({ name: "Summray Transcript Webhook", targetUrl, resource: "meetingTranscripts", event: "created" })
+        });
+        console.log("Webhooks ensured for target URL:", targetUrl);
+      } catch (e) {
+        console.error("Failed to ensure webhooks:", e);
+      }
+
       for (const recording of recordings) {
         // Check if meeting already exists in DB
-        if (!meetings.find((m: any) => m.id === recording.id)) {
+        const existingIndex = meetings.findIndex((m: any) => m.id === recording.id);
+        const existingMeeting = existingIndex !== -1 ? meetings[existingIndex] : null;
+        
+        let needsUpdate = false;
+        
+        if (!existingMeeting) {
           console.log(`Found new recording to sync: ${recording.topic}`);
-          
+          needsUpdate = true;
+        } else if (existingMeeting.transcript.includes("لا يوجد نص مفرغ") || !existingMeeting.report) {
+          console.log(`Checking existing recording for transcript update: ${recording.topic}`);
+          needsUpdate = true;
+        }
+        
+        if (needsUpdate) {
           let transcriptText = "";
-          if (recording.temporaryDirectDownloadLinks && recording.temporaryDirectDownloadLinks.transcriptDownloadLink) {
+          
+          // TRY MEETING TRANSCRIPT API FIRST
+          try {
+            console.log(`Checking Webex Meeting Transcript API for meetingId: ${recording.meetingId} or recordingId: ${recording.id}`);
+            // Sometimes meetingId is not directly in the recording payload, let's check
+            const transcriptRes = await fetch(`https://webexapis.com/v1/meetingTranscripts?meetingId=${recording.meetingId || recording.id}`, {
+              headers: { Authorization: `Bearer ${accessToken}` }
+            });
+            if (transcriptRes.ok) {
+              const transcriptData = await transcriptRes.json();
+              console.log("meetingTranscripts sync API response:", JSON.stringify(transcriptData, null, 2));
+              if (transcriptData.items && transcriptData.items.length > 0) {
+                 const tItem = transcriptData.items[0]; // get the first transcript
+                 if (tItem.downloadLink) {
+                    console.log(`Fetching VTT from downloadLink: ${tItem.downloadLink}`);
+                    const dlRes = await fetch(tItem.downloadLink, { headers: { Authorization: `Bearer ${accessToken}` } });
+                    if (dlRes.ok) {
+                       const vttContent = await dlRes.text();
+                       // Naive VTT to text
+                       transcriptText = parseVtt(vttContent);
+                       console.log(`Successfully fetched and parsed VTT from meetingTranscripts API. Length: ${transcriptText.length}`);
+                    } else {
+                       console.error(`Failed to fetch VTT. Status: ${dlRes.status}, ${dlRes.statusText}`);
+                    }
+                 } else {
+                    console.log("No downloadLink available in transcript item.");
+                 }
+              } else {
+                 console.log("No transcript items found in response.");
+              }
+            } else {
+               const errorText = await transcriptRes.text();
+               console.log(`meetingTranscripts API not available for this ID. Status: ${transcriptRes.status}, Error: ${errorText}`);
+            }
+          } catch (e) {
+             console.error("Error fetching from meetingTranscripts API in sync", e);
+          }
+
+          if (!transcriptText && recording.temporaryDirectDownloadLinks && recording.temporaryDirectDownloadLinks.transcriptDownloadLink) {
             try {
               const trRes = await fetch(recording.temporaryDirectDownloadLinks.transcriptDownloadLink);
               if (trRes.ok) {
-                transcriptText = await trRes.text();
+                const vttContent = await trRes.text();
+                // Check if it's VTT and parse it
+                if (vttContent.includes("WEBVTT")) {
+                   transcriptText = parseVtt(vttContent);
+                } else {
+                   transcriptText = vttContent;
+                }
               }
             } catch (e) {
               console.error("Failed to download transcript during sync", e);
@@ -441,26 +717,38 @@ async function startServer() {
             transcriptText = "لا يوجد نص مفرغ متاح لهذا الاجتماع (قد يستغرق Webex وقتاً بعد انتهاء الاجتماع لتوليد النص).";
           }
           
-          let reportContent = null;
-          if (transcriptText.length > 50 && !transcriptText.includes("لا يوجد نص مفرغ متاح لهذا الاجتماع")) {
-            console.log("Generating AI summary for synced recording...");
-            try {
-              reportContent = await generateGovernanceReport(transcriptText);
-            } catch (e) {
-              console.error("AI report failed during sync", e);
+          let reportContent = existingMeeting?.report || null;
+          if (transcriptText.length > 50 && !transcriptText.includes("لا يوجد نص مفرغ")) {
+            // Only generate report if we don't have one, OR if we previously had a fake transcript
+            if (!existingMeeting || !existingMeeting.report || existingMeeting.transcript.includes("لا يوجد نص مفرغ")) {
+              console.log("Generating AI summary for synced recording...");
+              try {
+                reportContent = await generateGovernanceReport(transcriptText);
+              } catch (e) {
+                console.error("AI report failed during sync", e);
+              }
             }
           }
           
-          meetings.unshift({
+          const meetingData = {
             id: recording.id,
             topic: recording.topic || "اجتماع غير معنون",
             createTime: recording.createTime || new Date().toISOString(),
             transcript: transcriptText,
             report: reportContent,
             playbackUrl: recording.playbackUrl
-          });
-          
-          newMeetingsAdded++;
+          };
+
+          if (existingMeeting) {
+            // Update only if we got a real transcript this time, to avoid overwriting existing data with empty ones unnecessarily
+            if (!transcriptText.includes("لا يوجد نص مفرغ") || existingMeeting.transcript.includes("لا يوجد نص مفرغ")) {
+               meetings[existingIndex] = { ...existingMeeting, ...meetingData };
+               newMeetingsAdded++; // treat as updated
+            }
+          } else {
+            meetings.unshift(meetingData);
+            newMeetingsAdded++;
+          }
         }
       }
       
@@ -539,6 +827,113 @@ async function startServer() {
         }
       }
       res.status(500).json({ error: errorMessage });
+    }
+  });
+
+  app.get("/api/admin/diagnostics", (req, res) => {
+    try {
+      const db = getDb();
+      const tokens = db.webexTokens;
+      
+      const hasToken = !!tokens?.access_token;
+      const isTokenValid = hasToken && Date.now() < (tokens.updated_at + tokens.expires_in * 1000);
+      const isRefreshValid = hasToken && Date.now() < (tokens.updated_at + tokens.refresh_token_expires_in * 1000);
+
+      res.json({
+        oauthConnected: hasToken,
+        accessTokenValid: isTokenValid,
+        refreshTokenValid: isRefreshValid,
+        webhookRegistered: db.webhookRegistered || false,
+        webhookDetails: db.webhookDetails || null,
+        lastWebhookReceived: db.lastWebhookReceived || null,
+        lastTranscriptImported: db.lastTranscriptImported || null,
+        lastSummaryGenerated: db.lastSummaryGenerated || null,
+      });
+    } catch (e: any) {
+      res.status(500).json({ error: e.message });
+    }
+  });
+
+  app.post("/api/admin/webhooks/setup", async (req, res) => {
+    try {
+      const accessToken = await getValidWebexToken();
+      if (!accessToken) {
+        return res.status(401).json({ error: "No valid token" });
+      }
+
+      console.log("Fetching existing webhooks...");
+      const listRes = await fetch("https://webexapis.com/v1/webhooks", {
+        headers: { Authorization: `Bearer ${accessToken}` }
+      });
+      if (!listRes.ok) throw new Error("Failed to list webhooks: " + await listRes.text());
+      const listData = await listRes.json();
+      const existingHooks = listData.items || [];
+
+      let foundHook = null;
+      // Delete old ones and find ours
+      for (const hook of existingHooks) {
+        if (hook.targetUrl === "https://summray.onrender.com/api/webhooks/webex") {
+          // If we found a matching hook, check if it's the right resource and event
+          if (hook.resource === "meetingRecordings" && hook.event === "created") {
+            foundHook = hook;
+          } else {
+             // Delete if it has wrong resource/event but same URL
+             await fetch(`https://webexapis.com/v1/webhooks/${hook.id}`, {
+               method: "DELETE",
+               headers: { Authorization: `Bearer ${accessToken}` }
+             });
+          }
+        } else if (hook.name.startsWith("Summray")) {
+           // Cleanup any old Summray webhooks with different URLs
+           await fetch(`https://webexapis.com/v1/webhooks/${hook.id}`, {
+             method: "DELETE",
+             headers: { Authorization: `Bearer ${accessToken}` }
+           });
+        }
+      }
+
+      const targetUrl = "https://summray.onrender.com/api/webhooks/webex";
+      
+      let createdHook = null;
+      if (!foundHook) {
+        console.log("Creating new webhook...");
+        const createRes = await fetch("https://webexapis.com/v1/webhooks", {
+          method: "POST",
+          headers: {
+            "Authorization": `Bearer ${accessToken}`,
+            "Content-Type": "application/json"
+          },
+          body: JSON.stringify({
+            name: "Summray MeetingRecordings Webhook",
+            targetUrl: targetUrl,
+            resource: "meetingRecordings",
+            event: "created"
+          })
+        });
+        if (!createRes.ok) {
+           throw new Error("Failed to create webhook: " + await createRes.text());
+        }
+        createdHook = await createRes.json();
+      } else {
+        createdHook = foundHook;
+        console.log("Reused existing webhook");
+      }
+
+      console.log("Webhook Registered successfully:");
+      console.log("- Webhook ID:", createdHook.id);
+      console.log("- Resource:", createdHook.resource);
+      console.log("- Event:", createdHook.event);
+      console.log("- Target URL:", createdHook.targetUrl);
+
+      updateDb({
+        webhookRegistered: true,
+        webhookDetails: createdHook
+      });
+
+      res.json({ success: true, webhook: createdHook });
+    } catch (e: any) {
+      console.error("Webhook setup error:", e);
+      res.status(500).json({ error: e.message });
     }
   });
 

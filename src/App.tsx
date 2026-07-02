@@ -45,7 +45,7 @@ export default function App() {
       const data = await res.json();
       if (data.success) {
         setMeetings(data.meetings);
-        setSyncMessage(`تمت المزامنة بنجاح. تم جلب ${data.count} اجتماع جديد.`);
+        setSyncMessage(`تمت المزامنة بنجاح. تم تحديث/إضافة ${data.count} اجتماع.`);
         setTimeout(() => setSyncMessage(null), 5000);
       } else {
         setSyncMessage("فشلت المزامنة.");
