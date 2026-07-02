@@ -529,6 +529,7 @@ if (hook.resource === "meetingTranscripts" && hook.event === "created") {
       const items = recordingsData.items || [];
       const meetings = db.meetings || [];
       let newCount = 0;
+      let transcriptsFound = 0;
 
       console.log(`Found ${items.length} recordings on Webex server. Checking for transcripts...`);
 
@@ -557,6 +558,7 @@ if (hook.resource === "meetingTranscripts" && hook.event === "created") {
                       if (dlRes.ok) {
                          const vttContent = await dlRes.text();
                          transcriptText = parseVtt(vttContent);
+                         transcriptsFound++;
                          console.log(`Successfully parsed transcript for meeting: ${item.topic || item.meetingId}`);
                       }
                    }
@@ -600,10 +602,139 @@ if (hook.resource === "meetingTranscripts" && hook.event === "created") {
          console.log("Sync complete. No new meetings with available transcripts found.");
       }
       
-      res.json({ success: true, count: newCount });
+      res.json({ success: true, count: newCount, totalRecordings: items.length, transcriptsFound });
     } catch (error) {
       console.error("Sync error:", error);
       res.status(500).json({ error: "Failed to sync Webex data" });
+    }
+  });
+
+  // Sync Custom Meeting via ID or URL
+  app.post("/api/webex/sync-custom", async (req, res) => {
+    try {
+      const { input } = req.body;
+      if (!input) {
+        return res.status(400).json({ error: "الرجاء توفير المعرف أو الرابط." });
+      }
+
+      const db = getDb();
+      if (!db.webexTokens) {
+        return res.status(401).json({ error: "Webex not connected" });
+      }
+
+      const accessToken = await getValidWebexToken();
+      let targetMeetingId = "";
+      
+      // Try to extract meeting number or ID
+      let meetingNumber = "";
+      if (/^\d{9,15}$/.test(input.replace(/[\s-]/g, ''))) {
+        meetingNumber = input.replace(/[\s-]/g, '');
+      } else {
+        // Try to extract meeting number from URL
+        const match = input.match(/[m|j]\/(\d{9,15})/);
+        if (match) {
+          meetingNumber = match[1];
+        } else {
+          // Maybe it's a meeting ID string
+          targetMeetingId = input;
+        }
+      }
+
+      // If we have a meeting number, get the real internal meeting ID
+      if (meetingNumber) {
+        const meetRes = await fetch(`https://webexapis.com/v1/meetings?meetingNumber=${meetingNumber}`, {
+          headers: { Authorization: `Bearer ${accessToken}` }
+        });
+        if (meetRes.ok) {
+          const meetData = await meetRes.json();
+          if (meetData.items && meetData.items.length > 0) {
+            targetMeetingId = meetData.items[0].id;
+          }
+        } else {
+          console.warn(`Failed to lookup meeting number ${meetingNumber}`, await meetRes.text());
+        }
+      }
+
+      if (!targetMeetingId && meetingNumber) {
+        return res.status(404).json({ error: "لم يتم العثور على الاجتماع باستخدام هذا المعرف." });
+      } else if (!targetMeetingId) {
+        targetMeetingId = input;
+      }
+
+      // First fetch the meeting details to get the topic
+      let topic = "اجتماع مستورد (مخصص)";
+      let createTime = new Date().toISOString();
+      const meetDetailsRes = await fetch(`https://webexapis.com/v1/meetings/${targetMeetingId}`, {
+        headers: { Authorization: `Bearer ${accessToken}` }
+      });
+      if (meetDetailsRes.ok) {
+         const meetDetails = await meetDetailsRes.json();
+         topic = meetDetails.title || meetDetails.topic || topic;
+         createTime = meetDetails.start || createTime;
+      }
+
+      // Now fetch transcript
+      const transcriptRes = await fetch(`https://webexapis.com/v1/meetingTranscripts?meetingId=${targetMeetingId}`, {
+        headers: { Authorization: `Bearer ${accessToken}` }
+      });
+      
+      if (!transcriptRes.ok) {
+        return res.status(404).json({ error: "لم يتم العثور على نص مسجل لهذا الاجتماع. (تأكد من تسجيل الاجتماع وإتاحة النصوص)" });
+      }
+      
+      const transcriptData = await transcriptRes.json();
+      if (!transcriptData.items || transcriptData.items.length === 0) {
+        return res.status(404).json({ error: "لا يوجد ملف نصي (Transcript) متاح لهذا الاجتماع." });
+      }
+
+      let transcriptText = "";
+      const tItem = transcriptData.items[0];
+      if (tItem.downloadLink) {
+        const dlRes = await fetch(tItem.downloadLink, { headers: { Authorization: `Bearer ${accessToken}` } });
+        if (dlRes.ok) {
+           const vttContent = await dlRes.text();
+           transcriptText = parseVtt(vttContent);
+        } else {
+           return res.status(500).json({ error: "فشل في تحميل ملف النص." });
+        }
+      }
+
+      if (!transcriptText) {
+        return res.status(404).json({ error: "نص الاجتماع فارغ." });
+      }
+
+      let reportContent = null;
+      try {
+         reportContent = await generateGovernanceReport(transcriptText);
+      } catch (err) {
+         console.error("Error generating report during custom sync:", err);
+      }
+
+      const meetings = db.meetings || [];
+      const newMeeting = {
+         id: targetMeetingId,
+         meetingId: targetMeetingId,
+         topic: topic,
+         createTime: createTime,
+         transcript: transcriptText,
+         report: reportContent,
+         playbackUrl: ""
+      };
+      
+      // Check if it exists to update instead of duplicate
+      const existingIndex = meetings.findIndex((m: any) => m.meetingId === targetMeetingId || m.id === targetMeetingId);
+      if (existingIndex !== -1) {
+         meetings[existingIndex] = newMeeting;
+      } else {
+         meetings.unshift(newMeeting);
+      }
+      
+      updateDb({ meetings });
+      res.json({ success: true, meeting: newMeeting });
+      
+    } catch (error) {
+      console.error("Custom sync error:", error);
+      res.status(500).json({ error: "حدث خطأ غير متوقع أثناء استرجاع الاجتماع." });
     }
   });
 

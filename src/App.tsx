@@ -37,6 +37,41 @@ export default function App() {
       .catch(err => console.error("Failed to fetch meetings:", err));
   };
 
+  const [customMeetingUrl, setCustomMeetingUrl] = useState('');
+  const [isSyncingCustom, setIsSyncingCustom] = useState(false);
+
+  const handleSyncCustom = async () => {
+    if (!customMeetingUrl.trim()) {
+      setSyncMessage('الرجاء إدخال رابط أو معرف الاجتماع');
+      setTimeout(() => setSyncMessage(null), 3000);
+      return;
+    }
+    setIsSyncingCustom(true);
+    setSyncMessage('جاري جلب الاجتماع المخصص...');
+    try {
+      const res = await fetch('/api/webex/sync-custom', { 
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ input: customMeetingUrl.trim() })
+      });
+      const data = await res.json();
+      
+      if (!res.ok) {
+        throw new Error(data.error || 'فشل جلب الاجتماع المخصص.');
+      }
+      
+      await fetchMeetings();
+      setSyncMessage('تم جلب الاجتماع المخصص بنجاح.');
+      setCustomMeetingUrl('');
+      setTimeout(() => setSyncMessage(null), 5000);
+    } catch (err: any) {
+      setSyncMessage(err.message || 'فشل جلب الاجتماع المخصص.');
+      setTimeout(() => setSyncMessage(null), 8000);
+    } finally {
+      setIsSyncingCustom(false);
+    }
+  };
+
   const handleSyncMeetings = async () => {
     setIsSyncing(true);
     setSyncMessage('جاري المزامنة مع Webex...');
@@ -50,11 +85,19 @@ export default function App() {
       
       await fetchMeetings(); // refresh the local list
       if (data.count > 0) {
-        setSyncMessage(`تمت المزامنة بنجاح واسترداد ${data.count} اجتماع(ات) جديدة`);
+        if (data.transcriptsFound === 0) {
+          setSyncMessage(`تم جلب ${data.count} اجتماع(ات)، ولكن لم نتمكن من الوصول لنصوصها. (قد تكون غير مسجلة نصياً أو ممنوعة بصلاحيات الشركة)`);
+        } else {
+          setSyncMessage(`تمت المزامنة بنجاح واسترداد ${data.count} اجتماع(ات) جديدة (${data.transcriptsFound} منها تحتوي على نصوص)`);
+        }
+        setTimeout(() => setSyncMessage(null), 8000);
+      } else if (data.totalRecordings === 0) {
+        setSyncMessage('لم يتم العثور على أي اجتماعات مسجلة في حسابك آخر 30 يوماً. (ملاحظة: تأكد من تسجيل اجتماعاتك، أو قد تمنع شركتك تصديرها)');
+        setTimeout(() => setSyncMessage(null), 10000);
       } else {
-        setSyncMessage('البيانات محدثة. لا توجد اجتماعات جديدة.');
+        setSyncMessage(`تم العثور على ${data.totalRecordings} تسجيل(ات) سابقة، ومزامنتها محدثة. (إذا لم تظهر النصوص، فالشركة لا توفرها عبر API)`);
+        setTimeout(() => setSyncMessage(null), 8000);
       }
-      setTimeout(() => setSyncMessage(null), 5000);
     } catch (err: any) {
       setSyncMessage(err.message || 'فشلت المزامنة. يرجى التأكد من الاتصال بـ Webex.');
       setTimeout(() => setSyncMessage(null), 8000);
@@ -336,18 +379,37 @@ export default function App() {
                 </span>
               )}
               {isWebexConnected && (
-                <button 
-                  onClick={handleSyncMeetings}
-                  disabled={isSyncing}
-                  className="text-xs flex items-center gap-1 bg-white border border-blue-200 text-blue-700 px-3 py-1.5 rounded hover:bg-blue-50 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
-                >
-                  {isSyncing ? (
-                    <Loader2 className="w-3 h-3 animate-spin" />
-                  ) : (
-                    <RefreshCw className="w-3 h-3" />
-                  )}
-                  {isSyncing ? 'جاري المزامنة...' : 'مزامنة السجلات الآن'}
-                </button>
+                <div className="flex items-center gap-2">
+                  <div className="flex items-center">
+                    <input 
+                      type="text" 
+                      placeholder="رابط أو معرف الاجتماع (اختياري)" 
+                      value={customMeetingUrl}
+                      onChange={(e) => setCustomMeetingUrl(e.target.value)}
+                      className="text-xs px-2 py-1.5 border border-slate-200 rounded-r focus:outline-none focus:ring-1 focus:ring-blue-500 min-w-[200px]"
+                    />
+                    <button 
+                      onClick={handleSyncCustom}
+                      disabled={isSyncingCustom || !customMeetingUrl.trim()}
+                      className="text-xs bg-blue-50 border border-r-0 border-blue-200 text-blue-700 px-3 py-1.5 rounded-l hover:bg-blue-100 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                      title="جلب اجتماع برابط مخصص"
+                    >
+                      {isSyncingCustom ? <Loader2 className="w-3 h-3 animate-spin" /> : 'جلب مخصص'}
+                    </button>
+                  </div>
+                  <button 
+                    onClick={handleSyncMeetings}
+                    disabled={isSyncing}
+                    className="text-xs flex items-center gap-1 bg-white border border-blue-200 text-blue-700 px-3 py-1.5 rounded hover:bg-blue-50 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                  >
+                    {isSyncing ? (
+                      <Loader2 className="w-3 h-3 animate-spin" />
+                    ) : (
+                      <RefreshCw className="w-3 h-3" />
+                    )}
+                    {isSyncing ? 'جاري المزامنة...' : 'مزامنة أحدث السجلات'}
+                  </button>
+                </div>
               )}
             </div>
           </div>
