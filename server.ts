@@ -498,6 +498,95 @@ async function startServer() {
   });
 
 
+  // Sync Meetings and Transcripts Manually
+  app.post("/api/webex/sync", async (req, res) => {
+    try {
+      const db = getDb();
+      if (!db.webexTokens) {
+        return res.status(401).json({ error: "Webex not connected" });
+      }
+
+      const accessToken = await getValidWebexToken();
+      
+      // Fetch recordings
+      const fromTime = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString(); // Last 30 days
+      const recordingsRes = await fetch(`https://webexapis.com/v1/recordings?from=${encodeURIComponent(fromTime)}&max=10`, {
+        headers: { Authorization: `Bearer ${accessToken}` }
+      });
+      
+      if (!recordingsRes.ok) {
+         return res.status(recordingsRes.status).json({ error: "Failed to fetch recordings" });
+      }
+      
+      const recordingsData = await recordingsRes.json();
+      const items = recordingsData.items || [];
+      const meetings = db.meetings || [];
+      let newCount = 0;
+
+      for (const item of items) {
+         // Skip if we already have it
+         if (meetings.some((m: any) => m.id === item.id || m.meetingId === item.meetingId)) {
+            continue;
+         }
+         
+         let transcriptText = "";
+         
+         // Try to fetch transcript for this meeting
+         if (item.meetingId) {
+            try {
+              const transcriptRes = await fetch(`https://webexapis.com/v1/meetingTranscripts?meetingId=${item.meetingId}`, {
+                headers: { Authorization: `Bearer ${accessToken}` }
+              });
+              if (transcriptRes.ok) {
+                const transcriptData = await transcriptRes.json();
+                if (transcriptData.items && transcriptData.items.length > 0) {
+                   const tItem = transcriptData.items[0];
+                   if (tItem.downloadLink) {
+                      const dlRes = await fetch(tItem.downloadLink, { headers: { Authorization: `Bearer ${accessToken}` } });
+                      if (dlRes.ok) {
+                         const vttContent = await dlRes.text();
+                         transcriptText = parseVtt(vttContent);
+                      }
+                   }
+                }
+              }
+            } catch (err) {
+               console.error("Error fetching transcript during sync for meeting:", item.meetingId, err);
+            }
+         }
+         
+         let reportContent = null;
+         if (transcriptText) {
+            try {
+               reportContent = await generateGovernanceReport(transcriptText);
+            } catch (err) {
+               console.error("Error generating report during sync:", err);
+            }
+         }
+         
+         meetings.unshift({
+            id: item.id,
+            meetingId: item.meetingId,
+            topic: item.topic || "اجتماع مستورد",
+            createTime: item.createTime,
+            transcript: transcriptText,
+            report: reportContent,
+            playbackUrl: item.playbackUrl || ""
+         });
+         newCount++;
+      }
+      
+      if (newCount > 0) {
+         updateDb({ meetings });
+      }
+      
+      res.json({ success: true, count: newCount });
+    } catch (error) {
+      console.error("Sync error:", error);
+      res.status(500).json({ error: "Failed to sync Webex data" });
+    }
+  });
+
   // Get Meetings List
   app.get("/api/meetings", (req, res) => {
     const db = getDb();

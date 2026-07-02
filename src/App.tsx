@@ -39,14 +39,21 @@ export default function App() {
 
   const handleSyncMeetings = async () => {
     setIsSyncing(true);
-    setSyncMessage('جاري استرجاع الاجتماعات...');
+    setSyncMessage('جاري المزامنة مع Webex...');
     try {
-      // For now, we just fetch meetings. In a real scenario, this might trigger a webhook or backend sync.
-      await fetchMeetings();
-      setSyncMessage('تمت المزامنة بنجاح');
+      const res = await fetch('/api/webex/sync', { method: 'POST' });
+      if (!res.ok) throw new Error('Sync failed');
+      const data = await res.json();
+      
+      await fetchMeetings(); // refresh the local list
+      if (data.count > 0) {
+        setSyncMessage(`تمت المزامنة بنجاح واسترداد ${data.count} اجتماع(ات) جديدة`);
+      } else {
+        setSyncMessage('البيانات محدثة. لا توجد اجتماعات جديدة.');
+      }
       setTimeout(() => setSyncMessage(null), 3000);
     } catch (err) {
-      setSyncMessage('فشلت المزامنة');
+      setSyncMessage('فشلت المزامنة. يرجى التأكد من الاتصال بـ Webex.');
       setTimeout(() => setSyncMessage(null), 3000);
     } finally {
       setIsSyncing(false);
