@@ -846,6 +846,50 @@ async function startServer() {
     }
   });
 
+  app.post("/api/admin/webhooks/test", async (req, res) => {
+    try {
+      const accessToken = await getValidWebexToken();
+      if (!accessToken) {
+        return res.status(401).json({ error: "No valid token" });
+      }
+
+      const resources = ['recordings', 'meetingRecordings', 'meetingTranscripts', 'transcripts', 'meetings', 'messages'];
+      const results = [];
+
+      for (const r of resources) {
+        const createRes = await fetch("https://webexapis.com/v1/webhooks", {
+          method: "POST",
+          headers: {
+            "Authorization": `Bearer ${accessToken}`,
+            "Content-Type": "application/json"
+          },
+          body: JSON.stringify({
+            name: "Test Hook " + r,
+            targetUrl: "https://summray.onrender.com/api/webhooks/webex",
+            resource: r,
+            event: "created"
+          })
+        });
+        
+        const body = await createRes.text();
+        results.push({ resource: r, status: createRes.status, body });
+        
+        if (createRes.ok) {
+           const hookData = JSON.parse(body);
+           // Delete it immediately since it's just a test
+           await fetch(`https://webexapis.com/v1/webhooks/${hookData.id}`, {
+             method: "DELETE",
+             headers: { Authorization: `Bearer ${accessToken}` }
+           });
+        }
+      }
+
+      res.json({ results });
+    } catch (e: any) {
+      res.status(500).json({ error: e.message });
+    }
+  });
+
   app.post("/api/admin/webhooks/setup", async (req, res) => {
     try {
       const accessToken = await getValidWebexToken();
@@ -889,21 +933,26 @@ async function startServer() {
       let createdHook = null;
       if (!foundHook) {
         console.log("Creating new webhook...");
+        const reqBody = {
+          name: "Summray Recording Webhook",
+          targetUrl: targetUrl,
+          resource: "recordings",
+          event: "created"
+        };
+        console.log("Webhook request body:", JSON.stringify(reqBody));
+
         const createRes = await fetch("https://webexapis.com/v1/webhooks", {
           method: "POST",
           headers: {
             "Authorization": `Bearer ${accessToken}`,
             "Content-Type": "application/json"
           },
-          body: JSON.stringify({
-            name: "Summray Recording Webhook",
-            targetUrl: targetUrl,
-            resource: "recordings",
-            event: "created"
-          })
+          body: JSON.stringify(reqBody)
         });
         if (!createRes.ok) {
-           throw new Error("Failed to create webhook: " + await createRes.text());
+           const errBody = await createRes.text();
+           console.error("Webhook creation failed. HTTP Response:", createRes.status, errBody);
+           throw new Error(`Failed to create webhook. HTTP ${createRes.status}: ${errBody}`);
         }
         createdHook = await createRes.json();
       } else {
@@ -912,19 +961,25 @@ async function startServer() {
       }
       
       // Attempt to register transcripts as well
-      await fetch("https://webexapis.com/v1/webhooks", {
+      const trReqBody = {
+        name: "Summray Transcript Webhook",
+        targetUrl: targetUrl,
+        resource: "meetingTranscripts",
+        event: "created"
+      };
+      console.log("Transcript Webhook request body:", JSON.stringify(trReqBody));
+
+      const trCreateRes = await fetch("https://webexapis.com/v1/webhooks", {
         method: "POST",
         headers: {
           "Authorization": `Bearer ${accessToken}`,
           "Content-Type": "application/json"
         },
-        body: JSON.stringify({
-          name: "Summray Transcript Webhook",
-          targetUrl: targetUrl,
-          resource: "meetingTranscripts",
-          event: "created"
-        })
+        body: JSON.stringify(trReqBody)
       });
+      if (!trCreateRes.ok) {
+         console.error("Transcript webhook creation failed. HTTP Response:", trCreateRes.status, await trCreateRes.text());
+      }
 
       console.log("Webhook Registered successfully:");
       console.log("- Webhook ID:", createdHook.id);

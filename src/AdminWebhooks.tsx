@@ -40,6 +40,27 @@ export default function AdminWebhooks() {
     }
   };
 
+  const [testResults, setTestResults] = useState<any[]>([]);
+
+  const handleTest = async () => {
+    setIsConfiguring(true);
+    setTestResults([]);
+    try {
+      const res = await fetch('/api/admin/webhooks/test', { method: 'POST' });
+      if (res.ok) {
+        const data = await res.json();
+        setTestResults(data.results);
+      } else {
+        const errData = await res.json();
+        setError(errData.error || "فشل اختبار Webhooks");
+      }
+    } catch (e: any) {
+      setError(e.message);
+    } finally {
+      setIsConfiguring(false);
+    }
+  };
+
   useEffect(() => {
     fetchDiagnostics();
   }, []);
@@ -75,14 +96,41 @@ export default function AdminWebhooks() {
           </div>
         </div>
 
-        <button 
-          onClick={handleConfigure}
-          disabled={isConfiguring || !data?.oauthConnected}
-          className="bg-blue-600 text-white px-4 py-2 rounded flex items-center gap-2 hover:bg-blue-700 disabled:opacity-50"
-        >
-          {isConfiguring ? <Loader2 className="w-4 h-4 animate-spin" /> : <RefreshCw className="w-4 h-4" />}
-          إعادة تكوين Webhooks
-        </button>
+        <div className="flex gap-4">
+          <button 
+            onClick={handleConfigure}
+            disabled={isConfiguring || !data?.oauthConnected}
+            className="bg-blue-600 text-white px-4 py-2 rounded flex items-center gap-2 hover:bg-blue-700 disabled:opacity-50"
+          >
+            {isConfiguring ? <Loader2 className="w-4 h-4 animate-spin" /> : <RefreshCw className="w-4 h-4" />}
+            إعادة تكوين Webhooks
+          </button>
+          
+          <button 
+            onClick={handleTest}
+            disabled={isConfiguring || !data?.oauthConnected}
+            className="bg-gray-600 text-white px-4 py-2 rounded flex items-center gap-2 hover:bg-gray-700 disabled:opacity-50"
+          >
+            {isConfiguring ? <Loader2 className="w-4 h-4 animate-spin" /> : <RefreshCw className="w-4 h-4" />}
+            اختبار الموارد
+          </button>
+        </div>
+
+        {testResults.length > 0 && (
+          <div className="mt-8">
+            <h2 className="text-xl font-bold text-gray-800 mb-4">نتائج الاختبار</h2>
+            <div className="space-y-4">
+              {testResults.map((r, i) => (
+                <div key={i} className="p-4 rounded border bg-gray-50 text-left" dir="ltr">
+                  <div className="font-bold text-lg">{r.resource} - Status: {r.status}</div>
+                  <pre className="text-xs text-gray-500 overflow-x-auto mt-2">
+                    {r.body}
+                  </pre>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
       </div>
     </div>
   );
