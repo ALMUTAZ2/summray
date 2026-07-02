@@ -308,9 +308,11 @@ async function startServer() {
               event: "created"
             })
           });
-          const newHook = await whRes.json();
-          console.log("Webhook Registered successfully:");
-          console.log("- Webhook ID:", newHook.id);
+          const body = await whRes.text();
+
+console.log("Webhook status:", whRes.status);
+console.log("Webhook body:", body);
+          
           console.log("- Resource:", newHook.resource);
           console.log("- Event:", newHook.event);
           console.log("- Target URL:", newHook.targetUrl);
@@ -339,7 +341,11 @@ async function startServer() {
           })
         });
         
-        console.log(`Webhook transcript registration response: ${trWhRes.status}`);
+        const trBody = await trWhRes.text();
+
+console.log("Transcript webhook status:", trWhRes.status);
+console.log("Transcript webhook body:", trBody);
+        
       } catch (webhookErr) {
         console.error("Exception while registering webhook:", webhookErr);
       }
