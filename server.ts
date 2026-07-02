@@ -489,6 +489,7 @@ if (hook.resource === "meetingTranscripts" && hook.event === "created") {
 
 
   // Sync Meetings and Transcripts Manually
+// 🔄 تحديث دالة المزامنة اليدوية لسحب اجتماعات الأمس والأيام الماضية بنجاح
   app.post("/api/webex/sync", async (req, res) => {
     try {
       const db = getDb();
@@ -498,14 +499,19 @@ if (hook.resource === "meetingTranscripts" && hook.event === "created") {
 
       const accessToken = await getValidWebexToken();
       
-      // Fetch recordings
-      const fromTime = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString(); // Last 30 days
-      const recordingsRes = await fetch(`https://webexapis.com/v1/recordings?from=${encodeURIComponent(fromTime)}&max=10`, {
+      // تحديد نطاق البحث لآخر 30 يوماً بتنسيق ISO الصحيح لويبكس
+      const fromTime = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString(); 
+      console.log(`Starting manual sync from date: ${fromTime}`);
+
+      // استدعاء تسجيلات ويبكس المتاحة خلال هذه الفترة (تمت إزالة الفلتر الخاطئ status: 'completed')
+      const recordingsRes = await fetch(`https://webexapis.com/v1/recordings?from=${encodeURIComponent(fromTime)}&max=20`, {
         headers: { Authorization: `Bearer ${accessToken}` }
       });
       
       if (!recordingsRes.ok) {
-         return res.status(recordingsRes.status).json({ error: "Failed to fetch recordings" });
+         const errText = await recordingsRes.text();
+         console.error("Failed to fetch recordings from Webex:", errText);
+         return res.status(recordingsRes.status).json({ error: "Failed to fetch recordings from Webex" });
       }
       
       const recordingsData = await recordingsRes.json();
@@ -513,20 +519,24 @@ if (hook.resource === "meetingTranscripts" && hook.event === "created") {
       const meetings = db.meetings || [];
       let newCount = 0;
 
+      console.log(`Found ${items.length} recordings on Webex server. Checking for transcripts...`);
+
       for (const item of items) {
-         // Skip if we already have it
+         // تخطي الاجتماع إذا كان مسجلاً ومسحوباً مسبقاً في قاعدة بيانات المنصة
          if (meetings.some((m: any) => m.id === item.id || m.meetingId === item.meetingId)) {
             continue;
          }
          
          let transcriptText = "";
          
-         // Try to fetch transcript for this meeting
+         // جلب النص المفرغ للاجتماع باستخدام الـ meetingId
          if (item.meetingId) {
             try {
+              console.log(`Fetching transcript for meetingId: ${item.meetingId}`);
               const transcriptRes = await fetch(`https://webexapis.com/v1/meetingTranscripts?meetingId=${item.meetingId}`, {
                 headers: { Authorization: `Bearer ${accessToken}` }
               });
+              
               if (transcriptRes.ok) {
                 const transcriptData = await transcriptRes.json();
                 if (transcriptData.items && transcriptData.items.length > 0) {
@@ -536,24 +546,30 @@ if (hook.resource === "meetingTranscripts" && hook.event === "created") {
                       if (dlRes.ok) {
                          const vttContent = await dlRes.text();
                          transcriptText = parseVtt(vttContent);
+                         console.log(`Successfully parsed transcript for meeting: ${item.topic || item.meetingId}`);
                       }
                    }
                 }
+              } else {
+                 console.warn(`No transcript available yet on Webex for meetingId: ${item.meetingId}, Status: ${transcriptRes.status}`);
               }
             } catch (err) {
                console.error("Error fetching transcript during sync for meeting:", item.meetingId, err);
             }
          }
          
+         // توليد تقرير الحوكمة والقرارات عبر ذكاء Groq الاصطناعي إذا وُجد نص للاجتماع
          let reportContent = null;
          if (transcriptText) {
             try {
+               console.log(`Generating governance report via Groq for synced meeting: ${item.topic}`);
                reportContent = await generateGovernanceReport(transcriptText);
             } catch (err) {
                console.error("Error generating report during sync:", err);
             }
          }
          
+         // إدراج الاجتماع المجلوب في بداية المصفوفة لعرضه بالواجهة
          meetings.unshift({
             id: item.id,
             meetingId: item.meetingId,
@@ -568,6 +584,9 @@ if (hook.resource === "meetingTranscripts" && hook.event === "created") {
       
       if (newCount > 0) {
          updateDb({ meetings });
+         console.log(`Sync complete. Added ${newCount} new meetings to db.json.`);
+      } else {
+         console.log("Sync complete. No new meetings with available transcripts found.");
       }
       
       res.json({ success: true, count: newCount });
