@@ -23,7 +23,8 @@ export default function App() {
   const [isWebexConnected, setIsWebexConnected] = useState(false);
   const [isCheckingWebex, setIsCheckingWebex] = useState(true);
   const [meetings, setMeetings] = useState<any[]>([]);
-
+  const [isSyncing, setIsSyncing] = useState(false);
+  const [syncMessage, setSyncMessage] = useState<string | null>(null);
 
   const fileInputRef = useRef<HTMLInputElement>(null);
   const reportRef = useRef<HTMLDivElement>(null);
@@ -36,6 +37,25 @@ export default function App() {
       .catch(err => console.error("Failed to fetch meetings:", err));
   };
 
+  const handleSyncMeetings = async () => {
+    setIsSyncing(true);
+    setSyncMessage(null);
+    try {
+      const res = await fetch('/api/meetings/sync', { method: 'POST' });
+      const data = await res.json();
+      if (res.ok) {
+        setSyncMessage(`تمت المزامنة: ${data.count} اجتماعات محدثة`);
+        fetchMeetings();
+      } else {
+        setSyncMessage(`فشل: ${data.error}`);
+      }
+    } catch (e: any) {
+      setSyncMessage(`خطأ: ${e.message}`);
+    } finally {
+      setIsSyncing(false);
+    }
+  };
+
 
 
   useEffect(() => {
@@ -43,9 +63,9 @@ export default function App() {
     fetch('/api/auth/webex/status')
       .then(res => res.json())
       .then(data => {
-        setIsWebexConnected(data.isConnected);
+        setIsWebexConnected(data.oauthConnected);
         setIsCheckingWebex(false);
-        if (data.isConnected) {
+        if (data.oauthConnected) {
           fetchMeetings();
           // Poll for new meetings every 30 seconds
           const interval = setInterval(fetchMeetings, 30000);
@@ -279,14 +299,29 @@ export default function App() {
               سجلات الاجتماعات (Webex)
             </h2>
             <div className="flex items-center gap-3">
+              {syncMessage && (
+                <span className="text-xs font-medium text-blue-700 bg-blue-100 px-2 py-1 rounded">
+                  {syncMessage}
+                </span>
+              )}
+              {isWebexConnected && (
+                <button 
+                  onClick={handleSyncMeetings}
+                  disabled={isSyncing}
+                  className="text-xs flex items-center gap-1 bg-white border border-blue-200 text-blue-700 px-3 py-1.5 rounded hover:bg-blue-50 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                >
+                  {isSyncing ? (
+                    <Loader2 className="w-3 h-3 animate-spin" />
+                  ) : (
+                    <RefreshCw className="w-3 h-3" />
+                  )}
+                  {isSyncing ? 'جاري المزامنة...' : 'مزامنة السجلات الآن'}
+                </button>
+              )}
             </div>
           </div>
           <div className="p-4 flex overflow-x-auto gap-4">
-            {!isWebexConnected ? (
-              <div className="text-sm text-slate-500 w-full text-center py-4">
-                قم بالربط مع Webex لعرض السجلات تلقائياً.
-              </div>
-            ) : meetings.length === 0 ? (
+            {meetings.length === 0 ? (
               <div className="text-sm text-slate-500 w-full text-center py-4">
                 لا توجد سجلات اجتماعات حالياً. اضغط على مزامنة أو ابدأ اجتماعاً جديداً.
               </div>
